@@ -9,5 +9,4 @@ mysql = "*"
 persistent = "*"
 router = "*"
 rustc-serialize = "*"
-r2d2 = "0.6.4"  # https://github.com/outersky/r2d2-mysql/issues/3
-r2d2_mysql = "*"
+
