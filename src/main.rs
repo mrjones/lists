@@ -36,13 +36,11 @@ enum LoginError {
 }
 
 struct RequestEnv {
-//    user_id: String,
     user: std::result::Result<User, LoginError>,
 }
 
 struct RequestEnvBuilder;
 impl iron::typemap::Key for RequestEnvBuilder { type Value = RequestEnv; }
-
 
 
 fn lookup_user(id: i64, db_conn: &mysql::Pool) -> std::result::Result<User, LoginError> {
@@ -87,20 +85,7 @@ impl iron::BeforeMiddleware for RequestEnvBuilder {
             user = get_user(params, conn);
         }
 
-//        let mut user_id = "".to_string();
-//        let mut user
-//        {
-
-//            match params.get("user_id") {
-//                Some(&params::Value::String(ref id_str)) => {
-//                    user_id = id_str.to_string()
-//                },
-//                _ => u 
-//            }
-//        }
-
         req.extensions.insert::<RequestEnvBuilder>(RequestEnv{
-//            user_id: user_id,
             user: user,
         });
 
@@ -138,16 +123,6 @@ fn main_page_handler(req: &mut iron::request::Request) -> iron::IronResult<iron:
         Ok(ref user) => return Ok(iron::response::Response::with(
             (status::Ok, format!("User: {:?}", user).to_string()))),
     }
-
-//   let params = &req.get_ref::<params::Params>().unwrap();
-//
-//    match params.get("user_id") {
-//        Some(&params::Value::String(ref id_str)) =>
-//            Ok(iron::response::Response::with(
-//            (status::Ok, format!("{}", id_str).to_string()))),
-//        _ => Ok(iron::response::Response::with(
-//            (iron::status::NotFound, "Missing user_id param"))),
-//    }
 }
 
 fn main() {
