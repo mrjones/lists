@@ -25,6 +25,13 @@ struct User {
     name: String,
 }
 
+// maps to "Lists" table in MySql
+#[derive(Debug, PartialEq, Eq, RustcEncodable)]
+struct List {
+    id: i64,
+    name: String,
+}
+
 #[derive(Debug)]
 enum LoginError {
     MissingParam,
@@ -113,22 +120,38 @@ fn list_users_handler(req: &mut iron::request::Request) -> iron::IronResult<iron
         (status::Ok, json::encode(&users).unwrap())))
 }
 
-fn main_page_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::response::Response> {
-//    let conn = &req.get::<Read<ConnectionPool>>().unwrap();
+fn show_lists_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::response::Response> {
+    let conn = &req.get::<Read<ConnectionPool>>().unwrap();
 
     let env = &req.extensions.get::<RequestEnvBuilder>().unwrap();
     match env.user {
         Err(ref err) => return Ok(iron::response::Response::with(
             (iron::status::NotFound, format!("ERROR: {:?}", err).to_string()))),
-        Ok(ref user) => return Ok(iron::response::Response::with(
-            (status::Ok, format!("User: {:?}", user).to_string()))),
+        Ok(ref user) => {
+            let lists: Vec<List> =
+                conn.prep_exec("SELECT lists.lists.id, lists.lists.name FROM lists.list_users LEFT JOIN lists.lists ON lists.list_users.list_id = lists.lists.id WHERE lists.list_users.user_id = ?", (user.id,))
+                .map(|res| {
+                    res.map(|x| x.unwrap())
+                        .map(|row | {
+                            let (id, name) = mysql::from_row(row);
+                            List {
+                                id: id,
+                                name: name,
+                            }
+                        }).collect()
+                }).unwrap();
+            
+
+            return Ok(iron::response::Response::with(
+                (status::Ok, format!("Lists: {:?}", lists).to_string())));
+        },
     }
 }
 
 fn main() {
     println!("Running.");
     let mut router = Router::new();
-    router.get(r"/", main_page_handler);
+    router.get(r"/", show_lists_handler);
     router.get(r"/users", list_users_handler);
     
     let mut chain = iron::Chain::new(router);
