@@ -1,6 +1,7 @@
 extern crate iron;
 extern crate mysql;
 extern crate router;
+extern crate params;
 extern crate persistent;
 extern crate rustc_serialize;
 
@@ -24,7 +25,20 @@ struct User {
     name: String,
 }
 
-fn main_page_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::response::Response> {
+#[derive(Debug)]
+struct StringError(String);
+
+impl std::fmt::Display for StringError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        std::fmt::Debug::fmt(self, f)
+    }
+}
+
+impl std::error::Error for StringError {
+    fn description(&self) -> &str { &*self.0 }
+}
+
+fn list_users_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::response::Response> {
     let conn = &req.get::<Read<ConnectionPool>>().unwrap();
 
     let users: Vec<User> =
@@ -44,10 +58,24 @@ fn main_page_handler(req: &mut iron::request::Request) -> iron::IronResult<iron:
         (status::Ok, json::encode(&users).unwrap())))
 }
 
+fn main_page_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::response::Response> {
+//    let conn = &req.get::<Read<ConnectionPool>>().unwrap();
+    let params = &req.get_ref::<params::Params>().unwrap();
+
+    match params.get("user_id") {
+        Some(&params::Value::String(ref id_str)) =>
+            Ok(iron::response::Response::with(
+            (status::Ok, format!("{}", id_str).to_string()))),
+        _ => Ok(iron::response::Response::with(
+            (iron::status::NotFound, "Missing user_id param"))),
+    }
+}
+
 fn main() {
     println!("Running.");
     let mut router = Router::new();
     router.get(r"/", main_page_handler);
+    router.get(r"/users", list_users_handler);
     
     let mut chain = iron::Chain::new(router);
 
