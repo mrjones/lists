@@ -25,28 +25,66 @@ struct User {
     name: String,
 }
 
+#[derive(Debug)]
+enum LoginError {
+    MissingParam,
+    InvalidParam,
+    DoesNotExist,
+
+    Unknown,
+}
+
 struct RequestEnv {
-    user_id: String,
+//    user_id: String,
+    user: std::result::Result<User, LoginError>,
 }
 
 struct RequestEnvBuilder;
 impl iron::typemap::Key for RequestEnvBuilder { type Value = RequestEnv; }
 
+//                    conn.prep_exec("SELECT id, name FROM lists.users WHERE id = ?", id)
+
+fn get_user(params: &params::Map, db_conn: &mysql::Pool) -> std::result::Result<User, LoginError> {
+    match params.get("user_id") {
+        Some(&params::Value::String(ref id_str)) => {
+            match id_str.parse::<i64>() {
+                Err(_) => return Err(LoginError::InvalidParam),
+                Ok(id_int) => return Ok(User{
+                    id: id_int,
+                    name: "UNIMPLEMENTED".to_string(),
+                }),
+            }
+        },
+        _ => return Err(LoginError::MissingParam)
+    }
+
+    return Err(LoginError::Unknown);
+}
+
 impl iron::BeforeMiddleware for RequestEnvBuilder {
     fn before(&self, req: &mut iron::request::Request) -> iron::IronResult<()> {
-        let mut user_id = "".to_string();
+        let user;
         {
+            let conn = &req.get::<Read<ConnectionPool>>().unwrap();
             let params = &req.get_ref::<params::Params>().unwrap();
-            match params.get("user_id") {
-                Some(&params::Value::String(ref id_str)) => {
-                    user_id = id_str.to_string()
-                },
-                _ => ()
-            }
+            user = get_user(params, conn);
         }
 
+//        let mut user_id = "".to_string();
+//        let mut user
+//        {
+
+//            match params.get("user_id") {
+//                Some(&params::Value::String(ref id_str)) => {
+//                    user_id = id_str.to_string()
+//                },
+//                _ => u 
+//            }
+//        }
+
         req.extensions.insert::<RequestEnvBuilder>(RequestEnv{
-            user_id: user_id,
+//            user_id: user_id,
+            user: user,
         });
 
         return Ok(());
@@ -77,12 +115,11 @@ fn main_page_handler(req: &mut iron::request::Request) -> iron::IronResult<iron:
 //    let conn = &req.get::<Read<ConnectionPool>>().unwrap();
 
     let env = &req.extensions.get::<RequestEnvBuilder>().unwrap();
-    if env.user_id.is_empty() {
-        return Ok(iron::response::Response::with(
-            (iron::status::NotFound, "Missing user_id param")));
-    } else {
-        return Ok(iron::response::Response::with(
-            (status::Ok, format!("ID string: {}", env.user_id).to_string())));
+    match env.user {
+        Err(ref err) => return Ok(iron::response::Response::with(
+            (iron::status::NotFound, format!("ERROR: {:?}", err).to_string()))),
+        Ok(ref user) => return Ok(iron::response::Response::with(
+            (status::Ok, format!("User: {:?}", user).to_string()))),
     }
 
 //   let params = &req.get_ref::<params::Params>().unwrap();
@@ -104,9 +141,9 @@ fn main() {
     
     let mut chain = iron::Chain::new(router);
 
-    chain.link_before(RequestEnvBuilder);
     chain.link(persistent::Read::<ConnectionPool>::both(
         mysql::Pool::new("mysql://lists:lists@localhost").unwrap()));
+    chain.link_before(RequestEnvBuilder);
     println!("Serving on port 2345");
     iron::Iron::new(chain).http("0.0.0.0:2345").unwrap();
 }
