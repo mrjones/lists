@@ -29,6 +29,7 @@ struct User {
 enum LoginError {
     MissingParam,
     InvalidParam,
+    DatabaseError,
     DoesNotExist,
 
     Unknown,
@@ -42,17 +43,33 @@ struct RequestEnv {
 struct RequestEnvBuilder;
 impl iron::typemap::Key for RequestEnvBuilder { type Value = RequestEnv; }
 
-//                    conn.prep_exec("SELECT id, name FROM lists.users WHERE id = ?", id)
+
+
+fn lookup_user(id: i64, db_conn: &mysql::Pool) -> std::result::Result<User, LoginError> {
+    match db_conn.prep_exec("SELECT id, name FROM lists.users WHERE id = ?", (id,)) {
+        Err(_) => return Err(LoginError::DatabaseError),
+        Ok(mut result) => match result.next() {
+            None => return Err(LoginError::DoesNotExist),
+            Some(row_result) => match row_result {
+                Err(_) => return Err(LoginError::DatabaseError),
+                Ok(row) => {
+                    let (id, name) = mysql::from_row(row);
+                    return Ok(User{
+                        id: id,
+                        name: name,
+                    })
+                }
+            }
+        }
+    }
+}
 
 fn get_user(params: &params::Map, db_conn: &mysql::Pool) -> std::result::Result<User, LoginError> {
     match params.get("user_id") {
         Some(&params::Value::String(ref id_str)) => {
             match id_str.parse::<i64>() {
+                Ok(id_int) => return lookup_user(id_int, db_conn),
                 Err(_) => return Err(LoginError::InvalidParam),
-                Ok(id_int) => return Ok(User{
-                    id: id_int,
-                    name: "UNIMPLEMENTED".to_string(),
-                }),
             }
         },
         _ => return Err(LoginError::MissingParam)
