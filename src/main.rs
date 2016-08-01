@@ -190,33 +190,28 @@ fn get_user(params: &std::collections::BTreeMap<String, String>, db_conn: &mysql
 
 impl iron::BeforeMiddleware for RequestEnvBuilder {
     fn before(&self, req: &mut iron::request::Request) -> iron::IronResult<()> {
-        println!("RequestEnvBuilder");
         let user;
         {
             let conn = &req.extensions.get::<persistent::Read<ConnectionPool>>().unwrap();
             let params = params_map(req);
             user = get_user(&params, conn);
         }
-        println!("RequestEnvBuilder got users");
 
         req.extensions.insert::<RequestEnvBuilder>(RequestEnv{
             user: user,
 //            db_pool: self.db_pool,
         });
 
-        println!("RequestEnvBuilder Saved Env");
 
         return Ok(());
     }
 }
 
 fn pick_user_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::response::Response> {
-    println!("pick_user_handler");
     return pick_user_immutable_handler(req);
 }
 
 fn pick_user_immutable_handler(req: &iron::request::Request) -> iron::IronResult<iron::response::Response> {
-    println!("pick_user_immutable_handler");
     let conn = &req.extensions.get::<persistent::Read<ConnectionPool>>().unwrap();
 
     let users: Vec<User> =
@@ -271,8 +266,6 @@ fn show_all_lists(user: &User, conn: &mysql::Pool) -> iron::IronResult<iron::res
 }
 
 fn show_all_lists_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::response::Response> {
-    println!("show_all_lists_handler");
-
     let env = &req.extensions.get::<RequestEnvBuilder>().unwrap();
     match env.user {
         Err(_) => return pick_user_immutable_handler(req),
@@ -284,7 +277,6 @@ fn show_all_lists_handler(req: &mut iron::request::Request) -> iron::IronResult<
 }
 
 fn show_one_list_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::response::Response> {
-    println!("show_one_list_handler");
     let conn = &req.get::<persistent::Read<ConnectionPool>>().unwrap();
     let params = params_map(req);
     let env = &req.extensions().get::<RequestEnvBuilder>().unwrap();
@@ -364,12 +356,9 @@ fn add_list_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::
 }
 
 fn add_list_item_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::response::Response> {
-    println!("add_list_item_handler");
     let body = read_body(req);
     let conn = &req.get::<persistent::Read<ConnectionPool>>().unwrap();
     let env = &req.extensions().get::<RequestEnvBuilder>().unwrap();
-
-    println!("BODY: {}", body);
 
     match env.user {
         Err(_) => return pick_user_immutable_handler(req),
@@ -380,8 +369,6 @@ fn add_list_item_handler(req: &mut iron::request::Request) -> iron::IronResult<i
             let list_id = body_params.get("list_id").unwrap();
             let name = body_params.get("name").unwrap();
             let description = body_params.get("description").unwrap();
-
-            println!("BODY PARAMS: {:?}", body_params);
 
             try!(conn.prep_exec("INSERT INTO lists.items (list_id, name, description) VALUES (?, ?, ?)", (list_id, name, description)).map_err(|err| iron::error::IronError::new(err, "")));
             return show_list(list_id, user, conn);
