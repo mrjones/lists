@@ -1,0 +1,11 @@
+<html>
+  <head>
+    <title>My Lists</title>
+  </head>
+  <body>
+    <ul>
+      {{#each users}}
+        <li><a href="/lists?user_id={{id}}">{{name}}</a></li>
+      {{/each}}
+  </body>
+</html>

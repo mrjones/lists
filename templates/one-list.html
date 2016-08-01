@@ -1,0 +1,21 @@
+<html>
+  <head>
+    <title>List: {{id}}</title>
+  </head>
+  <body>
+    <dl>
+      {{#each items}}
+        <dt>{{name}}</dt>
+        <dd>{{description}}</dd>
+      {{/each}}
+    </dl>
+    <form action="/add_list_item?user_id={{user_id}}" method="post">
+      Add item:<br/>
+      <input type="hidden" name="list_id" value="{{id}}" />
+
+      <input type="text" name="name" /><br/>
+      <textarea name="description"></textarea></br>
+      <input type="submit" value="Add" />
+    </form>
+  </body>
+</html>
