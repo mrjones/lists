@@ -150,20 +150,15 @@ struct RequestEnvBuilder {
 impl iron::typemap::Key for RequestEnvBuilder { type Value = RequestEnv; }
 
 fn lookup_user(id: i64, db_conn: &mysql::Pool) -> iron::IronResult<User> {
-    match db_conn.prep_exec("SELECT id, name FROM lists.users WHERE id = ?", (id,)) {
-        Err(_) => return Err(into_iron_error(ListsError::DatabaseError)),
-        Ok(mut result) => match result.next() {
-            None => return Err(into_iron_error(ListsError::DoesNotExist)),
-            Some(row_result) => match row_result {
-                Err(_) => return Err(into_iron_error(ListsError::DatabaseError)),
-                Ok(row) => {
-                    let (id, name) = mysql::from_row(row);
-                    return Ok(User{
-                        id: id,
-                        name: name,
-                    })
-                }
-            }
+    let mut result = itry!(db_conn.prep_exec("SELECT id, name FROM lists.users WHERE id = ?", (id,)));
+    match result.next() {
+        None => return Err(into_iron_error(ListsError::DoesNotExist)),
+        Some(row_result) => {
+            let (id, name) = mysql::from_row(itry!(row_result));
+            return Ok(User{
+                id: id,
+                name: name,
+            })
         }
     }
 }
