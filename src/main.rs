@@ -4,12 +4,14 @@ extern crate mysql;
 extern crate router;
 extern crate params;
 extern crate persistent;
+extern crate plugin;
 extern crate rustc_serialize;
 
 use iron::prelude::*;
 
 use iron::status;
 use persistent::Read;
+use plugin::Extensible;
 use router::Router;
 use rustc_serialize::json;
 use rustc_serialize::json::Json;
@@ -40,6 +42,24 @@ impl ToJson for List {
             let mut m: std::collections::BTreeMap<String, Json> = std::collections::BTreeMap::new();
             m.insert("name".to_string(), self.name.to_json());
             m.insert("id".to_string(), self.id.to_json());
+            m.to_json()
+    }
+}
+
+// maps to "Items" table in MySql
+#[derive(Debug, PartialEq, Eq, RustcEncodable)]
+struct Item {
+    id: i64,
+    name: String,
+    description: String,
+}
+
+impl ToJson for Item {
+    fn to_json(&self) -> Json {
+            let mut m: std::collections::BTreeMap<String, Json> = std::collections::BTreeMap::new();
+            m.insert("id".to_string(), self.id.to_json());
+            m.insert("name".to_string(), self.name.to_json());
+            m.insert("description".to_string(), self.description.to_json());
             m.to_json()
     }
 }
@@ -132,7 +152,7 @@ fn list_users_handler(req: &mut iron::request::Request) -> iron::IronResult<iron
         (status::Ok, json::encode(&users).unwrap())))
 }
 
-fn show_lists_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::response::Response> {
+fn show_all_lists_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::response::Response> {
     let conn = &req.get::<Read<ConnectionPool>>().unwrap();
 
     let env = &req.extensions.get::<RequestEnvBuilder>().unwrap();
@@ -157,6 +177,7 @@ fn show_lists_handler(req: &mut iron::request::Request) -> iron::IronResult<iron
             let mut data : std::collections::BTreeMap<String, Json> =
                 std::collections::BTreeMap::new();
             data.insert("lists".to_string(), lists.to_json());
+            data.insert("user_id".to_string(), user.id.to_json());
 
             let mut response = iron::response::Response::new();
             response
@@ -164,8 +185,57 @@ fn show_lists_handler(req: &mut iron::request::Request) -> iron::IronResult<iron
                 .set_mut(status::Ok);
             
             return Ok(response);
-//            return Ok(iron::response::Response::with(
-//                (status::Ok, format!("Lists: {:?}", lists).to_string())));
+        },
+    }
+}
+
+fn get_param(name: &str, params: &params::Map) -> std::option::Option<String> {
+    match params.get(name) {
+        Some(&params::Value::String(ref str)) => Some(str.to_string()),
+        _ => None,
+    }
+}
+
+fn show_one_list_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::response::Response> {
+    let conn = &req.get::<Read<ConnectionPool>>().unwrap();
+    let params = &req.get::<params::Params>().unwrap();
+    let env = &req.extensions_mut().get::<RequestEnvBuilder>().unwrap();
+
+    match env.user {
+        Err(ref err) => return Ok(iron::response::Response::with(
+            (iron::status::NotFound, format!("ERROR: {:?}", err).to_string()))),
+        Ok(ref user) => {
+            // TODO(mrjones): check permissions?
+            let mut data : std::collections::BTreeMap<String, Json> =
+                std::collections::BTreeMap::new();
+
+            let list_id = get_param("list_id", &params).unwrap(); 
+            // Fetch metadata for list
+            // TODO(mrjones): fetch name from DB
+            data.insert("id".to_string(), list_id.to_json());
+                
+            // Fetch items for list
+            let items: Vec<Item> =
+                conn.prep_exec("SELECT id, name, description FROM lists.items WHERE list_id = ?", (list_id,))
+                .map(|res| {
+                    res.map(|x| x.unwrap())
+                        .map(|row | {
+                            let (id, name, description) = mysql::from_row(row);
+                            Item {
+                                id: id,
+                                name: name,
+                                description: description,
+                            }
+                        }).collect()
+                }).unwrap();
+            data.insert("items".to_string(), items.to_json());
+
+            let mut response = iron::response::Response::new();
+            response
+                .set_mut(handlebars_iron::Template::new("one-list", data))
+                .set_mut(status::Ok);
+            
+            return Ok(response);
         },
     }
 }
@@ -175,12 +245,13 @@ fn main() {
     handlebars.add(Box::new(
         handlebars_iron::DirectorySource::new("./templates/", ".html")));
     if let Err(r) = handlebars.reload() {
-        panic!("{}", r);
+        panic!("{:?}", r);
     }
 
     println!("Running.");
     let mut router = Router::new();
-    router.get(r"/", show_lists_handler);
+    router.get(r"/", show_all_lists_handler);
+    router.get(r"/list", show_one_list_handler);
     router.get(r"/users", list_users_handler);
     
     let mut chain = iron::Chain::new(router);

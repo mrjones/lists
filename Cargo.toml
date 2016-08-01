@@ -9,6 +9,7 @@ iron = "*"
 mysql = "*"
 params = "*"
 persistent = "*"
+plugin = "*"
 router = "*"
 rustc-serialize = "*"
 
