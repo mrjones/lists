@@ -120,11 +120,11 @@ impl std::convert::From<LoginError> for iron::error::IronError {
 struct ErrorPage;
 
 impl iron::middleware::AfterMiddleware for ErrorPage {
-    fn after(&self, req: &mut iron::request::Request, res: iron::response::Response) -> iron::IronResult<iron::response::Response> {
+    fn after(&self, _: &mut iron::request::Request, res: iron::response::Response) -> iron::IronResult<iron::response::Response> {
         return Ok(res);
     }
 
-    fn catch(&self, req: &mut iron::request::Request, err: iron::error::IronError) -> iron::IronResult<iron::response::Response> {
+    fn catch(&self, _: &mut iron::request::Request, err: iron::error::IronError) -> iron::IronResult<iron::response::Response> {
         return Ok(iron::response::Response::with(
             (iron::status::NotFound, format!("ERROR PAGE!!\n{:?}", err).to_string())));
     }
@@ -349,25 +349,16 @@ fn add_list_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::
     let mut conn = pool.get_conn().unwrap();
 
     match env.user {
-        Err(ref err) => return pick_user_immutable_handler(req),
+        Err(_) => return pick_user_immutable_handler(req),
         Ok(ref user) => {
             let mut parse = url::form_urlencoded::parse(body.as_bytes());
             let body_params = parse_to_map(&mut parse);
 
             let name = body_params.get("name").unwrap();
 
-            {
-                let res = conn.prep_exec("INSERT INTO lists.lists (name) VALUES (?)", (name,));
-                if !res.is_ok() {
-                    return Ok(iron::response::Response::with(
-                        (iron::status::NotFound, format!("ERROR: {:?}", res.unwrap_err()).to_string())));
-                }
-            }
-            match conn.prep_exec("INSERT INTO lists.list_users (list_id, user_id) VALUES (LAST_INSERT_ID(), ?)", (user.id,)) {
-                Err(ref err) => return Ok(iron::response::Response::with(
-                    (iron::status::NotFound, format!("ERROR: {:?}", err).to_string()))),
-                Ok(_) => return show_all_lists(user, pool),
-            }
+            try!(conn.prep_exec("INSERT INTO lists.lists (name) VALUES (?)", (name,)).map_err(|err| iron::error::IronError::new(err, "")));
+            try!(conn.prep_exec("INSERT INTO lists.list_users (list_id, user_id) VALUES (LAST_INSERT_ID(), ?)", (user.id,)).map_err(|err| iron::error::IronError::new(err, "")));
+            return show_all_lists(user, pool);
         }
     }    
 }
@@ -381,7 +372,7 @@ fn add_list_item_handler(req: &mut iron::request::Request) -> iron::IronResult<i
     println!("BODY: {}", body);
 
     match env.user {
-        Err(ref err) => return pick_user_immutable_handler(req),
+        Err(_) => return pick_user_immutable_handler(req),
         Ok(ref user) => {
             let mut parse = url::form_urlencoded::parse(body.as_bytes());
             let body_params = parse_to_map(&mut parse);
