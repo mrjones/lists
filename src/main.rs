@@ -1,3 +1,4 @@
+extern crate handlebars_iron;
 extern crate iron;
 extern crate mysql;
 extern crate router;
@@ -11,6 +12,8 @@ use iron::status;
 use persistent::Read;
 use router::Router;
 use rustc_serialize::json;
+use rustc_serialize::json::Json;
+use rustc_serialize::json::ToJson;
 
 #[derive(Copy, Clone)]
 pub struct ConnectionPool;
@@ -30,6 +33,15 @@ struct User {
 struct List {
     id: i64,
     name: String,
+}
+
+impl ToJson for List {
+    fn to_json(&self) -> Json {
+            let mut m: std::collections::BTreeMap<String, Json> = std::collections::BTreeMap::new();
+            m.insert("name".to_string(), self.name.to_json());
+            m.insert("id".to_string(), self.id.to_json());
+            m.to_json()
+    }
 }
 
 #[derive(Debug)]
@@ -142,13 +154,30 @@ fn show_lists_handler(req: &mut iron::request::Request) -> iron::IronResult<iron
                 }).unwrap();
             
 
-            return Ok(iron::response::Response::with(
-                (status::Ok, format!("Lists: {:?}", lists).to_string())));
+            let mut data : std::collections::BTreeMap<String, Json> =
+                std::collections::BTreeMap::new();
+            data.insert("lists".to_string(), lists.to_json());
+
+            let mut response = iron::response::Response::new();
+            response
+                .set_mut(handlebars_iron::Template::new("my-lists", data))
+                .set_mut(status::Ok);
+            
+            return Ok(response);
+//            return Ok(iron::response::Response::with(
+//                (status::Ok, format!("Lists: {:?}", lists).to_string())));
         },
     }
 }
 
 fn main() {
+    let mut handlebars = handlebars_iron::HandlebarsEngine::new();
+    handlebars.add(Box::new(
+        handlebars_iron::DirectorySource::new("./templates/", ".html")));
+    if let Err(r) = handlebars.reload() {
+        panic!("{}", r);
+    }
+
     println!("Running.");
     let mut router = Router::new();
     router.get(r"/", show_lists_handler);
@@ -159,6 +188,8 @@ fn main() {
     chain.link(persistent::Read::<ConnectionPool>::both(
         mysql::Pool::new("mysql://lists:lists@localhost").unwrap()));
     chain.link_before(RequestEnvBuilder);
+    chain.link_after(handlebars);
+
     println!("Serving on port 2345");
     iron::Iron::new(chain).http("0.0.0.0:2345").unwrap();
 }
