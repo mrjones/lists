@@ -13,7 +13,6 @@ use iron::status;
 use persistent::Read;
 use plugin::Extensible;
 use router::Router;
-use rustc_serialize::json;
 use rustc_serialize::json::Json;
 use rustc_serialize::json::ToJson;
 
@@ -158,7 +157,11 @@ impl iron::BeforeMiddleware for RequestEnvBuilder {
 }
 
 fn pick_user_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::response::Response> {
-    let conn = &req.get::<Read<ConnectionPool>>().unwrap();
+    return pick_user_immutable_handler(req);
+}
+
+fn pick_user_immutable_handler(req: &iron::request::Request) -> iron::IronResult<iron::response::Response> {
+    let conn = &req.extensions.get::<Read<ConnectionPool>>().unwrap();
 
     let users: Vec<User> =
         conn.prep_exec("SELECT id, name FROM lists.users", ())
@@ -186,12 +189,11 @@ fn pick_user_handler(req: &mut iron::request::Request) -> iron::IronResult<iron:
 
 fn show_all_lists_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::response::Response> {
 
-    let conn = &req.get::<Read<ConnectionPool>>().unwrap();
     let env = &req.extensions.get::<RequestEnvBuilder>().unwrap();
     match env.user {
-        Err(ref err) => return Ok(iron::response::Response::with(
-            (iron::status::NotFound, format!("ERROR: {:?}", err).to_string()))),
+        Err(_) => return pick_user_immutable_handler(req),
         Ok(ref user) => {
+            let conn = &req.extensions.get::<Read<ConnectionPool>>().unwrap();
             let lists: Vec<List> =
                 conn.prep_exec("SELECT lists.lists.id, lists.lists.name FROM lists.list_users LEFT JOIN lists.lists ON lists.list_users.list_id = lists.lists.id WHERE lists.list_users.user_id = ?", (user.id,))
                 .map(|res| {
