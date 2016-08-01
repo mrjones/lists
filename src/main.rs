@@ -74,7 +74,7 @@ impl ToJson for Item {
 
 #[derive(Debug, Clone)]
 enum ListsError {
-    MissingParam { param_name: String },
+    MissingParam(String),
     InvalidParam,
     DatabaseError,
     DoesNotExist,
@@ -86,7 +86,7 @@ impl ListsError {
     fn str(&self) -> &str {
         match *self {
             // TODO(mrjones): print out which param is actually missing?
-            ListsError::MissingParam{param_name: _} => "MissingParam", 
+            ListsError::MissingParam(_) => "MissingParam", 
             ListsError::InvalidParam => "InvalidParam",
             ListsError::DatabaseError => "DatabaseError",
             ListsError::DoesNotExist => "DoesNotExist",
@@ -190,8 +190,7 @@ fn get_user(params: &std::collections::BTreeMap<String, String>, db_conn: &mysql
                 Err(_) => return Err(ListsError::InvalidParam),
             }
         },
-        _ => return Err(ListsError::MissingParam{
-            param_name: "user_id".to_string()})
+        _ => return Err(ListsError::MissingParam("user_id".to_string())),
     }
 
     return Err(ListsError::Unknown);
@@ -300,8 +299,8 @@ fn show_one_list_handler(req: &mut iron::request::Request) -> iron::IronResult<i
             // TODO(mrjones): check permissions?
             let list_id = try!(
                 params.get("list_id").ok_or(
-                    into_iron_error(ListsError::MissingParam{
-                        param_name: "list_id".to_string()})));
+                    into_iron_error(ListsError::MissingParam(
+                        "list_id".to_string()))));
             return show_list(list_id, user, conn);
         },
     }
@@ -358,13 +357,19 @@ fn add_list_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::
             let mut parse = url::form_urlencoded::parse(body.as_bytes());
             let body_params = parse_to_map(&mut parse);
 
-            let name = body_params.get("name").unwrap();
+            let name = try!(body_params.get("name").ok_or(
+                into_iron_error(ListsError::MissingParam(
+                    "name".to_string()))));
 
             try!(conn.prep_exec("INSERT INTO lists.lists (name) VALUES (?)", (name,)).map_err(into_iron_error));;
             try!(conn.prep_exec("INSERT INTO lists.list_users (list_id, user_id) VALUES (LAST_INSERT_ID(), ?)", (user.id,)).map_err(into_iron_error));
             return show_all_lists(user, pool);
         }
     }    
+}
+
+fn missing_param_error(param_name: &str) -> iron::error::IronError {
+    return into_iron_error(ListsError::MissingParam(param_name.to_string()));
 }
 
 fn add_list_item_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::response::Response> {
@@ -378,9 +383,12 @@ fn add_list_item_handler(req: &mut iron::request::Request) -> iron::IronResult<i
             let mut parse = url::form_urlencoded::parse(body.as_bytes());
             let body_params = parse_to_map(&mut parse);
 
-            let list_id = body_params.get("list_id").unwrap();
-            let name = body_params.get("name").unwrap();
-            let description = body_params.get("description").unwrap();
+            let list_id = try!(body_params.get("list_id").ok_or(
+                missing_param_error("list_id")));
+            let name = try!(body_params.get("name").ok_or(
+                missing_param_error("name")));
+            let description = try!(body_params.get("description").ok_or(
+                missing_param_error("description")));
 
             try!(conn.prep_exec("INSERT INTO lists.items (list_id, name, description) VALUES (?, ?, ?)", (list_id, name, description)).map_err(into_iron_error));
             return show_list(list_id, user, conn);
