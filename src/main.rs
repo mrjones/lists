@@ -1,4 +1,5 @@
 extern crate handlebars_iron;
+#[macro_use]
 extern crate iron;
 extern crate mysql;
 extern crate router;
@@ -223,8 +224,7 @@ fn pick_user_immutable_handler(req: &iron::request::Request) -> iron::IronResult
     let conn = &req.extensions.get::<persistent::Read<ConnectionPool>>().unwrap();
 
     let query_result : mysql::QueryResult =
-        try!(conn.prep_exec("SELECT id, name FROM lists.users", ())
-             .map_err(into_iron_error));
+        itry!(conn.prep_exec("SELECT id, name FROM lists.users", ()));
     let users_result: mysql::error::Result<Vec<User>> =
         query_result.map(|row_result| {
             let (id, name) = mysql::from_row(try!(row_result));
@@ -233,7 +233,7 @@ fn pick_user_immutable_handler(req: &iron::request::Request) -> iron::IronResult
                 name: name,
             });
         }).collect();
-    let users = try!(users_result.map_err(into_iron_error));
+    let users = itry!(users_result);
 
     let mut data : std::collections::BTreeMap<String, Json> =
         std::collections::BTreeMap::new();
@@ -248,7 +248,7 @@ fn pick_user_immutable_handler(req: &iron::request::Request) -> iron::IronResult
 
 fn show_all_lists(user: &User, conn: &mysql::Pool) -> iron::IronResult<iron::response::Response> {
     let query_result : mysql::QueryResult = 
-        try!(conn.prep_exec("SELECT lists.lists.id, lists.lists.name FROM lists.list_users LEFT JOIN lists.lists ON lists.list_users.list_id = lists.lists.id WHERE lists.list_users.user_id = ?", (user.id,)).map_err(into_iron_error));
+        itry!(conn.prep_exec("SELECT lists.lists.id, lists.lists.name FROM lists.list_users LEFT JOIN lists.lists ON lists.list_users.list_id = lists.lists.id WHERE lists.list_users.user_id = ?", (user.id,)));
     let lists_result: mysql::error::Result<Vec<List>> =
         query_result.map(|row_result| {
             let (id, name) = mysql::from_row(try!(row_result));
@@ -257,7 +257,7 @@ fn show_all_lists(user: &User, conn: &mysql::Pool) -> iron::IronResult<iron::res
                 name: name,
             });
         }).collect();
-    let lists = try!(lists_result.map_err(into_iron_error));
+    let lists = itry!(lists_result);
 
     let mut data : std::collections::BTreeMap<String, Json> =
         std::collections::BTreeMap::new();
@@ -296,10 +296,9 @@ fn show_one_list_handler(req: &mut iron::request::Request) -> iron::IronResult<i
         Err(ref err) => return Err(into_iron_error(err.clone())),
         Ok(ref user) => {
             // TODO(mrjones): check permissions?
-            let list_id = try!(
+            let list_id = itry!(
                 params.get("list_id").ok_or(
-                    into_iron_error(ListsError::MissingParam(
-                        "list_id".to_string()))));
+                    ListsError::MissingParam("list_id".to_string())));
             return show_list(list_id, user, conn);
         },
     }
@@ -315,7 +314,7 @@ fn show_list(list_id: &str, user: &User, conn: &mysql::Pool) -> iron::IronResult
                 
     // Fetch items for list
     let query_result : mysql::QueryResult =
-        try!(conn.prep_exec("SELECT id, name, description FROM lists.items WHERE list_id = ?", (list_id,)).map_err(into_iron_error));
+        itry!(conn.prep_exec("SELECT id, name, description FROM lists.items WHERE list_id = ?", (list_id,)));
     let items_result: mysql::error::Result<Vec<Item>> =
         query_result.map(|row_result| {
             let (id, name, description) = mysql::from_row(try!(row_result));
@@ -325,7 +324,7 @@ fn show_list(list_id: &str, user: &User, conn: &mysql::Pool) -> iron::IronResult
                 description: description,
             })
         }).collect();
-    let items = try!(items_result.map_err(into_iron_error));
+    let items = itry!(items_result);
 
     data.insert("items".to_string(), items.to_json());
     data.insert("user_id".to_string(), user.id.to_json());
@@ -356,12 +355,11 @@ fn add_list_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::
             let mut parse = url::form_urlencoded::parse(body.as_bytes());
             let body_params = parse_to_map(&mut parse);
 
-            let name = try!(body_params.get("name").ok_or(
-                into_iron_error(ListsError::MissingParam(
-                    "name".to_string()))));
+            let name = itry!(body_params.get("name").ok_or(
+                ListsError::MissingParam("name".to_string())));
 
-            try!(conn.prep_exec("INSERT INTO lists.lists (name) VALUES (?)", (name,)).map_err(into_iron_error));;
-            try!(conn.prep_exec("INSERT INTO lists.list_users (list_id, user_id) VALUES (LAST_INSERT_ID(), ?)", (user.id,)).map_err(into_iron_error));
+            itry!(conn.prep_exec("INSERT INTO lists.lists (name) VALUES (?)", (name,)));
+            itry!(conn.prep_exec("INSERT INTO lists.list_users (list_id, user_id) VALUES (LAST_INSERT_ID(), ?)", (user.id,)));
             return show_all_lists(user, pool);
         }
     }    
@@ -389,7 +387,7 @@ fn add_list_item_handler(req: &mut iron::request::Request) -> iron::IronResult<i
             let description = try!(body_params.get("description").ok_or(
                 missing_param_error("description")));
 
-            try!(conn.prep_exec("INSERT INTO lists.items (list_id, name, description) VALUES (?, ?, ?)", (list_id, name, description)).map_err(into_iron_error));
+            itry!(conn.prep_exec("INSERT INTO lists.items (list_id, name, description) VALUES (?, ?, ?)", (list_id, name, description)));
             return show_list(list_id, user, conn);
         },
     }
