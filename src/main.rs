@@ -294,7 +294,7 @@ fn show_one_list_handler(req: &mut iron::request::Request) -> iron::IronResult<i
 //    return show_list(list_id, &user, conn);
 
     match env.user {
-        Err(ref err) => return Err(iron::error::IronError::new(err.clone(), "")),
+        Err(ref err) => return Err(into_iron_error(err.clone())),
         Ok(ref user) => {
             // TODO(mrjones): check permissions?
             let list_id = try!(
