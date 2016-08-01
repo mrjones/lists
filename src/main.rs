@@ -223,7 +223,7 @@ fn pick_user_immutable_handler(req: &iron::request::Request) -> iron::IronResult
     let conn = &req.extensions.get::<persistent::Read<ConnectionPool>>().unwrap();
 
     let users: Vec<User> =
-        conn.prep_exec("SELECT id, name FROM lists.users", ())
+        try!(conn.prep_exec("SELECT id, name FROM lists.users", ())
         .map(|res| {
             res.map(|x| x.unwrap())
                 .map(|row | {
@@ -233,7 +233,7 @@ fn pick_user_immutable_handler(req: &iron::request::Request) -> iron::IronResult
                         name: name,
                     }
                 }).collect()
-        }).unwrap();
+        }).map_err(into_iron_error));
 
     let mut data : std::collections::BTreeMap<String, Json> =
         std::collections::BTreeMap::new();
@@ -248,7 +248,7 @@ fn pick_user_immutable_handler(req: &iron::request::Request) -> iron::IronResult
 
 fn show_all_lists(user: &User, conn: &mysql::Pool) -> iron::IronResult<iron::response::Response> {
     let lists: Vec<List> =
-        conn.prep_exec("SELECT lists.lists.id, lists.lists.name FROM lists.list_users LEFT JOIN lists.lists ON lists.list_users.list_id = lists.lists.id WHERE lists.list_users.user_id = ?", (user.id,))
+        try!(conn.prep_exec("SELECT lists.lists.id, lists.lists.name FROM lists.list_users LEFT JOIN lists.lists ON lists.list_users.list_id = lists.lists.id WHERE lists.list_users.user_id = ?", (user.id,))
         .map(|res| {
             res.map(|x| x.unwrap())
                 .map(|row | {
@@ -258,8 +258,8 @@ fn show_all_lists(user: &User, conn: &mysql::Pool) -> iron::IronResult<iron::res
                         name: name,
                     }
                 }).collect()
-        }).unwrap();
-            
+        }).map_err(into_iron_error));
+
     let mut data : std::collections::BTreeMap<String, Json> =
         std::collections::BTreeMap::new();
     data.insert("lists".to_string(), lists.to_json());
@@ -316,7 +316,7 @@ fn show_list(list_id: &str, user: &User, conn: &mysql::Pool) -> iron::IronResult
                 
     // Fetch items for list
     let items: Vec<Item> =
-        conn.prep_exec("SELECT id, name, description FROM lists.items WHERE list_id = ?", (list_id,))
+        try!(conn.prep_exec("SELECT id, name, description FROM lists.items WHERE list_id = ?", (list_id,))
         .map(|res| {
             res.map(|x| x.unwrap())
                 .map(|row | {
@@ -327,7 +327,7 @@ fn show_list(list_id: &str, user: &User, conn: &mysql::Pool) -> iron::IronResult
                         description: description,
                     }
                 }).collect()
-        }).unwrap();
+        }).map_err(into_iron_error));
     data.insert("items".to_string(), items.to_json());
     data.insert("user_id".to_string(), user.id.to_json());
 
