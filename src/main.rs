@@ -2,10 +2,10 @@ extern crate handlebars_iron;
 extern crate iron;
 extern crate mysql;
 extern crate router;
-extern crate params;
 extern crate persistent;
 extern crate plugin;
 extern crate rustc_serialize;
+extern crate url;
 
 use iron::prelude::*;
 
@@ -24,10 +24,19 @@ impl iron::typemap::Key for ConnectionPool {
 }
 
 // maps to "Users" table in MySql
-#[derive(Debug, PartialEq, Eq, RustcEncodable)]
+#[derive(Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 struct User {
     id: i64,
     name: String,
+}
+
+impl ToJson for User {
+    fn to_json(&self) -> Json {
+            let mut m: std::collections::BTreeMap<String, Json> = std::collections::BTreeMap::new();
+            m.insert("name".to_string(), self.name.to_json());
+            m.insert("id".to_string(), self.id.to_json());
+            m.to_json()
+    }
 }
 
 // maps to "Lists" table in MySql
@@ -75,10 +84,13 @@ enum LoginError {
 }
 
 struct RequestEnv {
+//    db_pool: &mysql::Pool,
     user: std::result::Result<User, LoginError>,
 }
 
-struct RequestEnvBuilder;
+struct RequestEnvBuilder {
+//    db_pool: &mysql::Pool,
+}
 impl iron::typemap::Key for RequestEnvBuilder { type Value = RequestEnv; }
 
 
@@ -101,9 +113,21 @@ fn lookup_user(id: i64, db_conn: &mysql::Pool) -> std::result::Result<User, Logi
     }
 }
 
-fn get_user(params: &params::Map, db_conn: &mysql::Pool) -> std::result::Result<User, LoginError> {
+fn params_map(req: &iron::request::Request) -> std::collections::BTreeMap<String, String> {
+    let url : url::Url = req.url.clone().into_generic_url();
+    
+    let mut result = std::collections::BTreeMap::new();
+    for (k,v) in url.query_pairs() {
+        let key : String = k.to_string();
+        let val : String = v.to_string();
+        let _ = result.insert(key, val);
+    }
+    return result;
+}
+
+fn get_user(params: &std::collections::BTreeMap<String, String>, db_conn: &mysql::Pool) -> std::result::Result<User, LoginError> {
     match params.get("user_id") {
-        Some(&params::Value::String(ref id_str)) => {
+        Some(ref id_str) => {
             match id_str.parse::<i64>() {
                 Ok(id_int) => return lookup_user(id_int, db_conn),
                 Err(_) => return Err(LoginError::InvalidParam),
@@ -119,20 +143,21 @@ impl iron::BeforeMiddleware for RequestEnvBuilder {
     fn before(&self, req: &mut iron::request::Request) -> iron::IronResult<()> {
         let user;
         {
-            let conn = &req.get::<Read<ConnectionPool>>().unwrap();
-            let params = &req.get_ref::<params::Params>().unwrap();
-            user = get_user(params, conn);
+            let conn = &req.extensions.get::<Read<ConnectionPool>>().unwrap();
+            let params = params_map(req);
+            user = get_user(&params, conn);
         }
 
         req.extensions.insert::<RequestEnvBuilder>(RequestEnv{
             user: user,
+//            db_pool: self.db_pool,
         });
 
         return Ok(());
     }
 }
 
-fn list_users_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::response::Response> {
+fn pick_user_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::response::Response> {
     let conn = &req.get::<Read<ConnectionPool>>().unwrap();
 
     let users: Vec<User> =
@@ -148,13 +173,20 @@ fn list_users_handler(req: &mut iron::request::Request) -> iron::IronResult<iron
                 }).collect()
         }).unwrap();
 
-    Ok(iron::response::Response::with(
-        (status::Ok, json::encode(&users).unwrap())))
+    let mut data : std::collections::BTreeMap<String, Json> =
+        std::collections::BTreeMap::new();
+    data.insert("users".to_string(), users.to_json());
+
+    let mut response = iron::response::Response::new();
+    response
+        .set_mut(handlebars_iron::Template::new("pick-user", data))
+        .set_mut(status::Ok);
+    return Ok(response);
 }
 
 fn show_all_lists_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::response::Response> {
-    let conn = &req.get::<Read<ConnectionPool>>().unwrap();
 
+    let conn = &req.get::<Read<ConnectionPool>>().unwrap();
     let env = &req.extensions.get::<RequestEnvBuilder>().unwrap();
     match env.user {
         Err(ref err) => return Ok(iron::response::Response::with(
@@ -189,17 +221,10 @@ fn show_all_lists_handler(req: &mut iron::request::Request) -> iron::IronResult<
     }
 }
 
-fn get_param(name: &str, params: &params::Map) -> std::option::Option<String> {
-    match params.get(name) {
-        Some(&params::Value::String(ref str)) => Some(str.to_string()),
-        _ => None,
-    }
-}
-
 fn show_one_list_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::response::Response> {
     let conn = &req.get::<Read<ConnectionPool>>().unwrap();
-    let params = &req.get::<params::Params>().unwrap();
-    let env = &req.extensions_mut().get::<RequestEnvBuilder>().unwrap();
+    let params = params_map(req);
+    let env = &req.extensions().get::<RequestEnvBuilder>().unwrap();
 
     match env.user {
         Err(ref err) => return Ok(iron::response::Response::with(
@@ -209,7 +234,7 @@ fn show_one_list_handler(req: &mut iron::request::Request) -> iron::IronResult<i
             let mut data : std::collections::BTreeMap<String, Json> =
                 std::collections::BTreeMap::new();
 
-            let list_id = get_param("list_id", &params).unwrap(); 
+            let list_id = params.get("list_id").unwrap();
             // Fetch metadata for list
             // TODO(mrjones): fetch name from DB
             data.insert("id".to_string(), list_id.to_json());
@@ -251,14 +276,19 @@ fn main() {
     println!("Running.");
     let mut router = Router::new();
     router.get(r"/", show_all_lists_handler);
+    router.get(r"/lists", show_all_lists_handler);
     router.get(r"/list", show_one_list_handler);
-    router.get(r"/users", list_users_handler);
+    router.get(r"/users", pick_user_handler);
     
     let mut chain = iron::Chain::new(router);
 
-    chain.link(persistent::Read::<ConnectionPool>::both(
-        mysql::Pool::new("mysql://lists:lists@localhost").unwrap()));
-    chain.link_before(RequestEnvBuilder);
+    let pool_reader : persistent::Read<ConnectionPool> = 
+        persistent::Read::<ConnectionPool>::one(
+            mysql::Pool::new("mysql://lists:lists@localhost").unwrap());
+    chain.link_before(pool_reader);
+    chain.link_before(RequestEnvBuilder{
+        //        db_pool: mysql::Pool::new("mysql://lists:lists@localhost").unwrap(),
+    });
     chain.link_after(handlebars);
 
     println!("Serving on port 2345");

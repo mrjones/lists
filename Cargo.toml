@@ -7,9 +7,8 @@ authors = ["Matt Jones <jonesmr@gmail.com>"]
 handlebars-iron = "*"
 iron = "*"
 mysql = "*"
-params = "*"
 persistent = "*"
 plugin = "*"
 router = "*"
 rustc-serialize = "*"
-
+url = "*"
