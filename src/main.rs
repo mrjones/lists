@@ -82,6 +82,19 @@ enum LoginError {
     Unknown,
 }
 
+struct ErrorPage;
+
+impl iron::middleware::AfterMiddleware for ErrorPage {
+    fn after(&self, req: &mut iron::request::Request, res: iron::response::Response) -> iron::IronResult<iron::response::Response> {
+        return Ok(res);
+    }
+
+    fn catch(&self, req: &mut iron::request::Request, err: iron::error::IronError) -> iron::IronResult<iron::response::Response> {
+        return Ok(iron::response::Response::with(
+            (iron::status::NotFound, format!("ERROR: {:?}", err).to_string())));
+    }
+}
+
 struct RequestEnv {
 //    db_pool: &mysql::Pool,
     user: std::result::Result<User, LoginError>,
@@ -375,8 +388,8 @@ fn main() {
             mysql::Pool::new("mysql://lists:lists@localhost").unwrap());
     chain.link_before(pool_reader);
     chain.link_before(RequestEnvBuilder{
-        //        db_pool: mysql::Pool::new("mysql://lists:lists@localhost").unwrap(),
     });
+    chain.link_after(ErrorPage);
     chain.link_after(handlebars);
 
     println!("Serving on port 2345");
