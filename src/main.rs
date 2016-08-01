@@ -151,16 +151,11 @@ impl iron::typemap::Key for RequestEnvBuilder { type Value = RequestEnv; }
 
 fn lookup_user(id: i64, db_conn: &mysql::Pool) -> iron::IronResult<User> {
     let mut result = itry!(db_conn.prep_exec("SELECT id, name FROM lists.users WHERE id = ?", (id,)));
-    match result.next() {
-        None => return Err(into_iron_error(ListsError::DoesNotExist)),
-        Some(row_result) => {
-            let (id, name) = mysql::from_row(itry!(row_result));
-            return Ok(User{
-                id: id,
-                name: name,
-            })
-        }
-    }
+    let row = itry!(result.next().ok_or(ListsError::DoesNotExist));
+    let (id, name) = mysql::from_row(itry!(row));
+    let user = User{id: id, name: name};
+    assert!(result.next().is_none(), "Duplicate user id!");
+    return Ok(user);
 }
 
 fn parse_to_map(parse: &mut url::form_urlencoded::Parse) -> std::collections::BTreeMap<String, String> {
