@@ -113,9 +113,16 @@ impl std::fmt::Display for LoginError {
 
 impl std::convert::From<LoginError> for iron::error::IronError {
     fn from(wrapped: LoginError) -> iron::error::IronError {
-        return iron::error::IronError::new(wrapped, "Login Error");
+        return into_iron_error(wrapped);
     }
 }
+
+fn into_iron_error<E: iron::error::Error>(err: E) -> iron::error::IronError {
+    let desc = err.description().to_owned();
+    return iron::error::IronError::new(err, desc);
+}
+
+
 
 struct ErrorPage;
 
@@ -348,8 +355,8 @@ fn add_list_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::
 
             let name = body_params.get("name").unwrap();
 
-            try!(conn.prep_exec("INSERT INTO lists.lists (name) VALUES (?)", (name,)).map_err(|err| iron::error::IronError::new(err, "")));
-            try!(conn.prep_exec("INSERT INTO lists.list_users (list_id, user_id) VALUES (LAST_INSERT_ID(), ?)", (user.id,)).map_err(|err| iron::error::IronError::new(err, "")));
+            try!(conn.prep_exec("INSERT INTO lists.lists (name) VALUES (?)", (name,)).map_err(into_iron_error));;
+            try!(conn.prep_exec("INSERT INTO lists.list_users (list_id, user_id) VALUES (LAST_INSERT_ID(), ?)", (user.id,)).map_err(into_iron_error));
             return show_all_lists(user, pool);
         }
     }    
@@ -370,7 +377,7 @@ fn add_list_item_handler(req: &mut iron::request::Request) -> iron::IronResult<i
             let name = body_params.get("name").unwrap();
             let description = body_params.get("description").unwrap();
 
-            try!(conn.prep_exec("INSERT INTO lists.items (list_id, name, description) VALUES (?, ?, ?)", (list_id, name, description)).map_err(|err| iron::error::IronError::new(err, "")));
+            try!(conn.prep_exec("INSERT INTO lists.items (list_id, name, description) VALUES (?, ?, ?)", (list_id, name, description)).map_err(into_iron_error));
             return show_list(list_id, user, conn);
         },
     }
