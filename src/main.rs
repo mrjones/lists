@@ -141,7 +141,7 @@ impl iron::middleware::AfterMiddleware for ErrorPage {
 
 struct RequestEnv {
 //    db_pool: &mysql::Pool,
-    user: std::result::Result<User, ListsError>,
+    user: iron::IronResult<User>,
 }
 
 struct RequestEnvBuilder {
@@ -149,13 +149,13 @@ struct RequestEnvBuilder {
 }
 impl iron::typemap::Key for RequestEnvBuilder { type Value = RequestEnv; }
 
-fn lookup_user(id: i64, db_conn: &mysql::Pool) -> std::result::Result<User, ListsError> {
+fn lookup_user(id: i64, db_conn: &mysql::Pool) -> iron::IronResult<User> {
     match db_conn.prep_exec("SELECT id, name FROM lists.users WHERE id = ?", (id,)) {
-        Err(_) => return Err(ListsError::DatabaseError),
+        Err(_) => return Err(into_iron_error(ListsError::DatabaseError)),
         Ok(mut result) => match result.next() {
-            None => return Err(ListsError::DoesNotExist),
+            None => return Err(into_iron_error(ListsError::DoesNotExist)),
             Some(row_result) => match row_result {
-                Err(_) => return Err(ListsError::DatabaseError),
+                Err(_) => return Err(into_iron_error(ListsError::DatabaseError)),
                 Ok(row) => {
                     let (id, name) = mysql::from_row(row);
                     return Ok(User{
@@ -183,18 +183,11 @@ fn params_map(req: &iron::request::Request) -> std::collections::BTreeMap<String
     return parse_to_map(&mut url.query_pairs());
 }
 
-fn get_user(params: &std::collections::BTreeMap<String, String>, db_conn: &mysql::Pool) -> std::result::Result<User, ListsError> {
-    match params.get("user_id") {
-        Some(ref id_str) => {
-            match id_str.parse::<i64>() {
-                Ok(id_int) => return lookup_user(id_int, db_conn),
-                Err(_) => return Err(ListsError::InvalidParam),
-            }
-        },
-        _ => return Err(ListsError::MissingParam("user_id".to_string())),
-    }
-
-    return Err(ListsError::Unknown);
+fn get_user(params: &std::collections::BTreeMap<String, String>, db_conn: &mysql::Pool) -> iron::IronResult<User> {
+    let id_str = itry!(params.get("user_id").ok_or(
+        ListsError::MissingParam("user_id".to_string())));
+    let id_int = itry!(id_str.parse::<i64>());
+    return lookup_user(id_int, db_conn);
 }
 
 impl iron::BeforeMiddleware for RequestEnvBuilder {
@@ -293,7 +286,8 @@ fn show_one_list_handler(req: &mut iron::request::Request) -> iron::IronResult<i
 //    return show_list(list_id, &user, conn);
 
     match env.user {
-        Err(ref err) => return Err(into_iron_error(err.clone())),
+        // TODO(mrjones): propagate error
+        Err(_) => return Err(into_iron_error(ListsError::Unknown)),
         Ok(ref user) => {
             // TODO(mrjones): check permissions?
             let list_id = itry!(
