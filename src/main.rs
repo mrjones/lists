@@ -72,7 +72,7 @@ impl ToJson for Item {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum LoginError {
     MissingParam,
     InvalidParam,
@@ -80,6 +80,41 @@ enum LoginError {
     DoesNotExist,
 
     Unknown,
+}
+
+impl LoginError {
+    fn str(&self) -> &str {
+        match *self {
+            LoginError::MissingParam => "MissingParam",
+            LoginError::InvalidParam => "InvalidParam",
+            LoginError::DatabaseError => "DatabaseError",
+            LoginError::DoesNotExist => "DoesNotExist",
+            LoginError::Unknown => "Unknown",
+        }
+    }
+}
+
+impl std::error::Error for LoginError {
+    fn description(&self) -> &str {
+        return self.str();
+    }
+
+    fn cause(&self) -> Option<&std::error::Error> {
+        return None;
+    }
+}
+
+impl std::fmt::Display for LoginError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        return f.write_str(self.str());
+    }
+}
+
+
+impl std::convert::From<LoginError> for iron::error::IronError {
+    fn from(wrapped: LoginError) -> iron::error::IronError {
+        return iron::error::IronError::new(wrapped, "Login Error");
+    }
 }
 
 struct ErrorPage;
@@ -91,7 +126,7 @@ impl iron::middleware::AfterMiddleware for ErrorPage {
 
     fn catch(&self, req: &mut iron::request::Request, err: iron::error::IronError) -> iron::IronResult<iron::response::Response> {
         return Ok(iron::response::Response::with(
-            (iron::status::NotFound, format!("ERROR: {:?}", err).to_string())));
+            (iron::status::NotFound, format!("ERROR PAGE!!\n{:?}", err).to_string())));
     }
 }
 
@@ -104,7 +139,6 @@ struct RequestEnvBuilder {
 //    db_pool: &mysql::Pool,
 }
 impl iron::typemap::Key for RequestEnvBuilder { type Value = RequestEnv; }
-
 
 fn lookup_user(id: i64, db_conn: &mysql::Pool) -> std::result::Result<User, LoginError> {
     match db_conn.prep_exec("SELECT id, name FROM lists.users WHERE id = ?", (id,)) {
@@ -255,9 +289,12 @@ fn show_one_list_handler(req: &mut iron::request::Request) -> iron::IronResult<i
     let params = params_map(req);
     let env = &req.extensions().get::<RequestEnvBuilder>().unwrap();
 
+//    let user = try!(env.user);
+//    let list_id = params.get("list_id").unwrap();
+//    return show_list(list_id, &user, conn);
+
     match env.user {
-        Err(ref err) => return Ok(iron::response::Response::with(
-            (iron::status::NotFound, format!("ERROR: {:?}", err).to_string()))),
+        Err(ref err) => return Err(iron::error::IronError::new(err.clone(), "")),
         Ok(ref user) => {
             // TODO(mrjones): check permissions?
             let list_id = params.get("list_id").unwrap();
