@@ -73,8 +73,8 @@ impl ToJson for Item {
 }
 
 #[derive(Debug, Clone)]
-enum LoginError {
-    MissingParam,
+enum ListsError {
+    MissingParam { param_name: String },
     InvalidParam,
     DatabaseError,
     DoesNotExist,
@@ -82,19 +82,20 @@ enum LoginError {
     Unknown,
 }
 
-impl LoginError {
+impl ListsError {
     fn str(&self) -> &str {
         match *self {
-            LoginError::MissingParam => "MissingParam",
-            LoginError::InvalidParam => "InvalidParam",
-            LoginError::DatabaseError => "DatabaseError",
-            LoginError::DoesNotExist => "DoesNotExist",
-            LoginError::Unknown => "Unknown",
+            // TODO(mrjones): print out which param is actually missing?
+            ListsError::MissingParam{param_name: _} => "MissingParam", 
+            ListsError::InvalidParam => "InvalidParam",
+            ListsError::DatabaseError => "DatabaseError",
+            ListsError::DoesNotExist => "DoesNotExist",
+            ListsError::Unknown => "Unknown",
         }
     }
 }
 
-impl std::error::Error for LoginError {
+impl std::error::Error for ListsError {
     fn description(&self) -> &str {
         return self.str();
     }
@@ -104,15 +105,15 @@ impl std::error::Error for LoginError {
     }
 }
 
-impl std::fmt::Display for LoginError {
+impl std::fmt::Display for ListsError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         return f.write_str(self.str());
     }
 }
 
 
-impl std::convert::From<LoginError> for iron::error::IronError {
-    fn from(wrapped: LoginError) -> iron::error::IronError {
+impl std::convert::From<ListsError> for iron::error::IronError {
+    fn from(wrapped: ListsError) -> iron::error::IronError {
         return into_iron_error(wrapped);
     }
 }
@@ -139,7 +140,7 @@ impl iron::middleware::AfterMiddleware for ErrorPage {
 
 struct RequestEnv {
 //    db_pool: &mysql::Pool,
-    user: std::result::Result<User, LoginError>,
+    user: std::result::Result<User, ListsError>,
 }
 
 struct RequestEnvBuilder {
@@ -147,13 +148,13 @@ struct RequestEnvBuilder {
 }
 impl iron::typemap::Key for RequestEnvBuilder { type Value = RequestEnv; }
 
-fn lookup_user(id: i64, db_conn: &mysql::Pool) -> std::result::Result<User, LoginError> {
+fn lookup_user(id: i64, db_conn: &mysql::Pool) -> std::result::Result<User, ListsError> {
     match db_conn.prep_exec("SELECT id, name FROM lists.users WHERE id = ?", (id,)) {
-        Err(_) => return Err(LoginError::DatabaseError),
+        Err(_) => return Err(ListsError::DatabaseError),
         Ok(mut result) => match result.next() {
-            None => return Err(LoginError::DoesNotExist),
+            None => return Err(ListsError::DoesNotExist),
             Some(row_result) => match row_result {
-                Err(_) => return Err(LoginError::DatabaseError),
+                Err(_) => return Err(ListsError::DatabaseError),
                 Ok(row) => {
                     let (id, name) = mysql::from_row(row);
                     return Ok(User{
@@ -181,18 +182,19 @@ fn params_map(req: &iron::request::Request) -> std::collections::BTreeMap<String
     return parse_to_map(&mut url.query_pairs());
 }
 
-fn get_user(params: &std::collections::BTreeMap<String, String>, db_conn: &mysql::Pool) -> std::result::Result<User, LoginError> {
+fn get_user(params: &std::collections::BTreeMap<String, String>, db_conn: &mysql::Pool) -> std::result::Result<User, ListsError> {
     match params.get("user_id") {
         Some(ref id_str) => {
             match id_str.parse::<i64>() {
                 Ok(id_int) => return lookup_user(id_int, db_conn),
-                Err(_) => return Err(LoginError::InvalidParam),
+                Err(_) => return Err(ListsError::InvalidParam),
             }
         },
-        _ => return Err(LoginError::MissingParam)
+        _ => return Err(ListsError::MissingParam{
+            param_name: "user_id".to_string()})
     }
 
-    return Err(LoginError::Unknown);
+    return Err(ListsError::Unknown);
 }
 
 impl iron::BeforeMiddleware for RequestEnvBuilder {
@@ -296,7 +298,10 @@ fn show_one_list_handler(req: &mut iron::request::Request) -> iron::IronResult<i
         Err(ref err) => return Err(iron::error::IronError::new(err.clone(), "")),
         Ok(ref user) => {
             // TODO(mrjones): check permissions?
-            let list_id = params.get("list_id").unwrap();
+            let list_id = try!(
+                params.get("list_id").ok_or(
+                    into_iron_error(ListsError::MissingParam{
+                        param_name: "list_id".to_string()})));
             return show_list(list_id, user, conn);
         },
     }
@@ -407,6 +412,7 @@ fn main() {
             mysql::Pool::new("mysql://lists:lists@localhost").unwrap());
     chain.link_before(pool_reader);
     chain.link_before(RequestEnvBuilder{
+//        db_pool: mysql::Pool::new("mysql://lists:lists@localhost").unwrap(),
     });
     chain.link_after(ErrorPage);
     chain.link_after(handlebars);
