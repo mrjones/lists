@@ -383,11 +383,8 @@ fn add_list_item_handler(req: &mut iron::request::Request) -> iron::IronResult<i
 
             println!("BODY PARAMS: {:?}", body_params);
 
-            match conn.prep_exec("INSERT INTO lists.items (list_id, name, description) VALUES (?, ?, ?)", (list_id, name, description)) {
-                Err(ref err) => return Ok(iron::response::Response::with(
-                    (iron::status::NotFound, format!("ERROR: {:?}", err).to_string()))),
-                Ok(_) => show_list(list_id, user, conn),
-            }
+            try!(conn.prep_exec("INSERT INTO lists.items (list_id, name, description) VALUES (?, ?, ?)", (list_id, name, description)).map_err(|err| iron::error::IronError::new(err, "")));
+            return show_list(list_id, user, conn);
         },
     }
 }
