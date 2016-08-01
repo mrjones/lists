@@ -7,5 +7,11 @@
       {{#each lists}}
         <li><a href="/list?list_id={{id}}&user_id={{../user_id}}">{{name}}</a></li>
       {{/each}}
+    </ul>
+    <form action="/add_list?user_id={{user_id}}" method="post">
+      New List:
+      <input type="text" name="name" /><br/>
+      <input type="submit" value="Create" />
+    </form>
   </body>
 </html>

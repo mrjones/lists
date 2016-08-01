@@ -196,6 +196,33 @@ fn pick_user_immutable_handler(req: &iron::request::Request) -> iron::IronResult
     return Ok(response);
 }
 
+fn show_all_lists(user: &User, conn: &mysql::Pool) -> iron::IronResult<iron::response::Response> {
+    let lists: Vec<List> =
+        conn.prep_exec("SELECT lists.lists.id, lists.lists.name FROM lists.list_users LEFT JOIN lists.lists ON lists.list_users.list_id = lists.lists.id WHERE lists.list_users.user_id = ?", (user.id,))
+        .map(|res| {
+            res.map(|x| x.unwrap())
+                .map(|row | {
+                    let (id, name) = mysql::from_row(row);
+                    List {
+                        id: id,
+                        name: name,
+                    }
+                }).collect()
+        }).unwrap();
+            
+    let mut data : std::collections::BTreeMap<String, Json> =
+        std::collections::BTreeMap::new();
+    data.insert("lists".to_string(), lists.to_json());
+    data.insert("user_id".to_string(), user.id.to_json());
+    
+    let mut response = iron::response::Response::new();
+    response
+        .set_mut(handlebars_iron::Template::new("my-lists", data))
+        .set_mut(status::Ok);
+            
+    return Ok(response);
+}
+
 fn show_all_lists_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::response::Response> {
     println!("show_all_lists_handler");
 
@@ -204,31 +231,7 @@ fn show_all_lists_handler(req: &mut iron::request::Request) -> iron::IronResult<
         Err(_) => return pick_user_immutable_handler(req),
         Ok(ref user) => {
             let conn = &req.extensions.get::<persistent::Read<ConnectionPool>>().unwrap();
-            let lists: Vec<List> =
-                conn.prep_exec("SELECT lists.lists.id, lists.lists.name FROM lists.list_users LEFT JOIN lists.lists ON lists.list_users.list_id = lists.lists.id WHERE lists.list_users.user_id = ?", (user.id,))
-                .map(|res| {
-                    res.map(|x| x.unwrap())
-                        .map(|row | {
-                            let (id, name) = mysql::from_row(row);
-                            List {
-                                id: id,
-                                name: name,
-                            }
-                        }).collect()
-                }).unwrap();
-            
-
-            let mut data : std::collections::BTreeMap<String, Json> =
-                std::collections::BTreeMap::new();
-            data.insert("lists".to_string(), lists.to_json());
-            data.insert("user_id".to_string(), user.id.to_json());
-
-            let mut response = iron::response::Response::new();
-            response
-                .set_mut(handlebars_iron::Template::new("my-lists", data))
-                .set_mut(status::Ok);
-            
-            return Ok(response);
+            return show_all_lists(user, conn);
         },
     }
 }
@@ -289,11 +292,40 @@ fn read_body(req: &mut iron::request::Request) -> String {
     return buf;
 }
 
+fn add_list_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::response::Response> {
+    let body = read_body(req);
+    let pool = &req.get::<persistent::Read<ConnectionPool>>().unwrap();
+    let env = &req.extensions().get::<RequestEnvBuilder>().unwrap();
+    let mut conn = pool.get_conn().unwrap();
+
+    match env.user {
+        Err(ref err) => return pick_user_immutable_handler(req),
+        Ok(ref user) => {
+            let mut parse = url::form_urlencoded::parse(body.as_bytes());
+            let body_params = parse_to_map(&mut parse);
+
+            let name = body_params.get("name").unwrap();
+
+            {
+                let res = conn.prep_exec("INSERT INTO lists.lists (name) VALUES (?)", (name,));
+                if !res.is_ok() {
+                    return Ok(iron::response::Response::with(
+                        (iron::status::NotFound, format!("ERROR: {:?}", res.unwrap_err()).to_string())));
+                }
+            }
+            match conn.prep_exec("INSERT INTO lists.list_users (list_id, user_id) VALUES (LAST_INSERT_ID(), ?)", (user.id,)) {
+                Err(ref err) => return Ok(iron::response::Response::with(
+                    (iron::status::NotFound, format!("ERROR: {:?}", err).to_string()))),
+                Ok(_) => return show_all_lists(user, pool),
+            }
+        }
+    }    
+}
+
 fn add_list_item_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::response::Response> {
     println!("add_list_item_handler");
     let body = read_body(req);
     let conn = &req.get::<persistent::Read<ConnectionPool>>().unwrap();
-    let url_params = params_map(req);
     let env = &req.extensions().get::<RequestEnvBuilder>().unwrap();
 
     println!("BODY: {}", body);
@@ -333,6 +365,7 @@ fn main() {
     router.get(r"/list", show_one_list_handler);
     router.get(r"/users", pick_user_handler);
     router.any(r"/add_list_item", add_list_item_handler);
+    router.any(r"/add_list", add_list_handler);
     router.get(r"/", show_all_lists_handler);
     
     let mut chain = iron::Chain::new(router);
