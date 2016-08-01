@@ -222,18 +222,18 @@ fn pick_user_handler(req: &mut iron::request::Request) -> iron::IronResult<iron:
 fn pick_user_immutable_handler(req: &iron::request::Request) -> iron::IronResult<iron::response::Response> {
     let conn = &req.extensions.get::<persistent::Read<ConnectionPool>>().unwrap();
 
-    let users: Vec<User> =
+    let query_result : mysql::QueryResult =
         try!(conn.prep_exec("SELECT id, name FROM lists.users", ())
-        .map(|res| {
-            res.map(|x| x.unwrap())
-                .map(|row | {
-                    let (id, name) = mysql::from_row(row);
-                    User {
-                        id: id,
-                        name: name,
-                    }
-                }).collect()
-        }).map_err(into_iron_error));
+             .map_err(into_iron_error));
+    let users_result: mysql::error::Result<Vec<User>> =
+        query_result.map(|row_result| {
+            let (id, name) = mysql::from_row(try!(row_result));
+            return Ok(User {
+                id: id,
+                name: name,
+            });
+        }).collect();
+    let users = try!(users_result.map_err(into_iron_error));
 
     let mut data : std::collections::BTreeMap<String, Json> =
         std::collections::BTreeMap::new();
@@ -247,18 +247,17 @@ fn pick_user_immutable_handler(req: &iron::request::Request) -> iron::IronResult
 }
 
 fn show_all_lists(user: &User, conn: &mysql::Pool) -> iron::IronResult<iron::response::Response> {
-    let lists: Vec<List> =
-        try!(conn.prep_exec("SELECT lists.lists.id, lists.lists.name FROM lists.list_users LEFT JOIN lists.lists ON lists.list_users.list_id = lists.lists.id WHERE lists.list_users.user_id = ?", (user.id,))
-        .map(|res| {
-            res.map(|x| x.unwrap())
-                .map(|row | {
-                    let (id, name) = mysql::from_row(row);
-                    List {
-                        id: id,
-                        name: name,
-                    }
-                }).collect()
-        }).map_err(into_iron_error));
+    let query_result : mysql::QueryResult = 
+        try!(conn.prep_exec("SELECT lists.lists.id, lists.lists.name FROM lists.list_users LEFT JOIN lists.lists ON lists.list_users.list_id = lists.lists.id WHERE lists.list_users.user_id = ?", (user.id,)).map_err(into_iron_error));
+    let lists_result: mysql::error::Result<Vec<List>> =
+        query_result.map(|row_result| {
+            let (id, name) = mysql::from_row(try!(row_result));
+            return Ok(List {
+                id: id,
+                name: name,
+            });
+        }).collect();
+    let lists = try!(lists_result.map_err(into_iron_error));
 
     let mut data : std::collections::BTreeMap<String, Json> =
         std::collections::BTreeMap::new();
@@ -315,19 +314,19 @@ fn show_list(list_id: &str, user: &User, conn: &mysql::Pool) -> iron::IronResult
     data.insert("id".to_string(), list_id.to_json());
                 
     // Fetch items for list
-    let items: Vec<Item> =
-        try!(conn.prep_exec("SELECT id, name, description FROM lists.items WHERE list_id = ?", (list_id,))
-        .map(|res| {
-            res.map(|x| x.unwrap())
-                .map(|row | {
-                    let (id, name, description) = mysql::from_row(row);
-                    Item {
-                        id: id,
-                        name: name,
-                        description: description,
-                    }
-                }).collect()
-        }).map_err(into_iron_error));
+    let query_result : mysql::QueryResult =
+        try!(conn.prep_exec("SELECT id, name, description FROM lists.items WHERE list_id = ?", (list_id,)).map_err(into_iron_error));
+    let items_result: mysql::error::Result<Vec<Item>> =
+        query_result.map(|row_result| {
+            let (id, name, description) = mysql::from_row(try!(row_result));
+            return Ok(Item {
+                id: id,
+                name: name,
+                description: description,
+            })
+        }).collect();
+    let items = try!(items_result.map_err(into_iron_error));
+
     data.insert("items".to_string(), items.to_json());
     data.insert("user_id".to_string(), user.id.to_json());
 
