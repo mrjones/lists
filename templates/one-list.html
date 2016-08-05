@@ -1,6 +1,12 @@
 <html>
   <head>
     <title>List: {{id}}</title>
+    <script language="javascript">
+      function submitDeleteUserForm(user_id) {
+        document.getElementById("removed_user_id").value = user_id;
+        document.getElementById("delete_user_form").submit();
+      }
+    </script>
   </head>
   <body>
     <dl>
@@ -11,11 +17,36 @@
     </dl>
     <form action="/add_list_item?user_id={{user_id}}" method="post">
       Add item:<br/>
-      <input type="hidden" name="list_id" value="{{id}}" />
+      <input type="hidden" name="list_id" value="{{list_id}}" />
 
       <input type="text" name="name" /><br/>
       <textarea name="description"></textarea></br>
       <input type="submit" value="Add" />
+    </form>
+    <hr/>
+    Who can see this list?
+    <form action="/remove_list_user?user_id={{user_id}}" method="post" id="delete_user_form">
+      <input type="hidden" id="removed_user_id" name="removed_user_id" value="not-set" />
+      <input type="hidden" name="list_id" value="{{list_id}}" />
+    <ul>
+      {{#each accessors}}
+      <li>
+          {{name}}
+          [<a href="javascript:submitDeleteUserForm({{id}});">-</a>]
+        </form>
+      </li>
+      {{/each}}
+    </ul>
+    <hr/>
+    Add another user:
+    <form action="/add_list_user?user_id={{user_id}}" method="post">
+      <input type="hidden" name="list_id" value="{{../id}}" />
+      <select name="new_user_id">
+        {{#each all_users}}
+        <option value="{{id}}">{{name}}</option>
+        {{/each}}
+      </select>
+      <input type="submit" value="Add User" />
     </form>
   </body>
 </html>

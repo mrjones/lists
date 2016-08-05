@@ -295,23 +295,58 @@ fn show_list(list_id: &str, user: &User, conn: &mysql::Pool) -> iron::IronResult
     // Fetch metadata for list
     // TODO(mrjones): fetch name from DB
     data.insert("id".to_string(), list_id.to_json());
-                
-    // Fetch items for list
-    let query_result : mysql::QueryResult =
-        itry!(conn.prep_exec("SELECT id, name, description FROM lists.items WHERE list_id = ?", (list_id,)));
-    let items_result: mysql::error::Result<Vec<Item>> =
-        query_result.map(|row_result| {
-            let (id, name, description) = mysql::from_row(try!(row_result));
-            return Ok(Item {
-                id: id,
-                name: name,
-                description: description,
-            })
-        }).collect();
-    let items = itry!(items_result);
+
+    let items;
+    {
+        let query_result : mysql::QueryResult =
+            itry!(conn.prep_exec("SELECT id, name, description FROM lists.items WHERE list_id = ?", (list_id,)));
+        let items_result: mysql::error::Result<Vec<Item>> =
+            query_result.map(|row_result| {
+                let (id, name, description) = mysql::from_row(try!(row_result));
+                return Ok(Item {
+                    id: id,
+                    name: name,
+                    description: description,
+                })
+            }).collect();
+        items = itry!(items_result);
+    }
+
+    let all_users;
+    {
+        let query_result : mysql::QueryResult =
+            itry!(conn.prep_exec("SELECT id, name FROM lists.users ORDER BY name ASC", ()));
+        let all_users_result : mysql::error::Result<Vec<User>> =
+            query_result.map(|row_result| {
+                let (id, name) = mysql::from_row(try!(row_result));
+                return Ok(User {
+                    id: id,
+                    name: name,
+                });
+            }).collect();
+        all_users = itry!(all_users_result);
+    }
+    
+    let accessors;
+    {
+        let query_result : mysql::QueryResult =
+            itry!(conn.prep_exec("SELECT lists.users.id, lists.users.name FROM lists.list_users LEFT JOIN lists.users ON lists.list_users.user_id = lists.users.id WHERE lists.list_users.list_id = ?", (list_id,)));
+        let accessors_result : mysql::error::Result<Vec<User>> =
+            query_result.map(|row_result| {
+                let (id, name) = mysql::from_row(try!(row_result));
+                return Ok(User {
+                    id: id,
+                    name: name,
+                });
+            }).collect();
+        accessors = itry!(accessors_result);
+    }
 
     data.insert("items".to_string(), items.to_json());
+    data.insert("list_id".to_string(), list_id.to_json());
     data.insert("user_id".to_string(), user.id.to_json());
+    data.insert("accessors".to_string(), accessors.to_json());
+    data.insert("all_users".to_string(), all_users.to_json());
 
     let mut response = iron::response::Response::new();
     response
@@ -373,6 +408,50 @@ fn add_list_item_handler(req: &mut iron::request::Request) -> iron::IronResult<i
     }
 }
 
+fn add_list_user_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::response::Response> {
+    let body = read_body(req);
+    let conn = &req.get::<persistent::Read<ConnectionPool>>().unwrap();
+    let env = &req.extensions().get::<RequestEnvBuilder>().unwrap();
+
+    match env.user {
+        Err(_) => return pick_user_immutable_handler(req),
+        Ok(ref user) => {
+            let mut parse = url::form_urlencoded::parse(body.as_bytes());
+            let body_params = parse_to_map(&mut parse);
+
+            let list_id = itry!(body_params.get("list_id").ok_or(
+                ListsError::MissingParam("list_id".to_string())));
+            let new_user_id = itry!(body_params.get("new_user_id").ok_or(
+                ListsError::MissingParam("new_user_id".to_string())));
+
+            itry!(conn.prep_exec("INSERT INTO lists.list_users (list_id, user_id) VALUES (?, ?)", (list_id, new_user_id)));
+            return show_list(list_id, user, conn);
+        },
+    }
+}
+
+fn remove_list_user_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::response::Response> {
+    let body = read_body(req);
+    let conn = &req.get::<persistent::Read<ConnectionPool>>().unwrap();
+    let env = &req.extensions().get::<RequestEnvBuilder>().unwrap();
+
+    match env.user {
+        Err(_) => return pick_user_immutable_handler(req),
+        Ok(ref user) => {
+            let mut parse = url::form_urlencoded::parse(body.as_bytes());
+            let body_params = parse_to_map(&mut parse);
+
+            let list_id = itry!(body_params.get("list_id").ok_or(
+                ListsError::MissingParam("list_id".to_string())));
+            let removed_user_id = itry!(body_params.get("removed_user_id").ok_or(
+                ListsError::MissingParam("removed_user_id".to_string())));
+
+            itry!(conn.prep_exec("DELETE FROM lists.list_users WHERE list_id = ? AND  user_id = ?", (list_id, removed_user_id)));
+            return show_list(list_id, user, conn);
+        },
+    }
+}
+
 fn main() {
     let mut handlebars = handlebars_iron::HandlebarsEngine::new();
     handlebars.add(Box::new(
@@ -387,7 +466,9 @@ fn main() {
     router.get(r"/list", show_one_list_handler);
     router.get(r"/users", pick_user_handler);
     router.any(r"/add_list_item", add_list_item_handler);
+    router.any(r"/add_list_user", add_list_user_handler);
     router.any(r"/add_list", add_list_handler);
+    router.any(r"/remove_list_user", remove_list_user_handler);
     router.get(r"/", show_all_lists_handler);
     
     let mut chain = iron::Chain::new(router);
