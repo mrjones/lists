@@ -10,9 +10,17 @@
   </head>
   <body>
     <dl>
-      {{#each items}}
-        <dt>{{name}}</dt>
-        <dd>{{description}}</dd>
+      {{#each annotated_items}}
+        <dt>{{item.name}}</dt>
+        <dd>
+          {{item.description}}
+          <ul>
+            {{#each annotations}}
+            <li>{{kind}} : {{body}}</li>
+            {{/each}}
+          </ul>
+        </dd>
+        
       {{/each}}
     </dl>
     <form action="/add_list_item?user_id={{user_id}}" method="post">

@@ -56,7 +56,7 @@ impl ToJson for List {
 }
 
 // maps to "Items" table in MySql
-#[derive(Debug, PartialEq, Eq, RustcEncodable)]
+#[derive(Clone, Debug, PartialEq, Eq, RustcEncodable)]
 struct Item {
     id: i64,
     name: String,
@@ -73,12 +73,47 @@ impl ToJson for Item {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, RustcEncodable)]
+struct Annotation {
+    id: i64,
+    item_id: i64,
+    kind: i32,
+    body: String,
+}
+
+impl ToJson for Annotation {
+    fn to_json(&self) -> Json {
+            let mut m: std::collections::BTreeMap<String, Json> = std::collections::BTreeMap::new();
+            m.insert("id".to_string(), self.id.to_json());
+            m.insert("item_id".to_string(), self.item_id.to_json());
+            m.insert("kind".to_string(), self.kind.to_json());
+            m.insert("body".to_string(), self.body.to_json());
+            m.to_json()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, RustcEncodable)]
+struct AnnotatedItem {
+    item: Item,
+    annotations: Vec<Annotation>,
+}
+
+impl ToJson for AnnotatedItem {
+    fn to_json(&self) -> Json {
+            let mut m: std::collections::BTreeMap<String, Json> = std::collections::BTreeMap::new();
+            m.insert("item".to_string(), self.item.to_json());
+            m.insert("annotations".to_string(), self.annotations.to_json());
+            m.to_json()
+    }
+}
+
 #[derive(Debug, Clone)]
 enum ListsError {
     MissingParam(String),
     InvalidParam,
     DatabaseError,
     DoesNotExist,
+    InconsistentDatabase(String),
 
     Unknown,
 }
@@ -92,6 +127,7 @@ impl ListsError {
             ListsError::DatabaseError => "DatabaseError",
             ListsError::DoesNotExist => "DoesNotExist",
             ListsError::Unknown => "Unknown",
+            ListsError::InconsistentDatabase(_) => "InconsistentDababase",
         }
     }
 }
@@ -312,6 +348,36 @@ fn show_list(list_id: &str, user: &User, conn: &mysql::Pool) -> iron::IronResult
         items = itry!(items_result);
     }
 
+    let annotations;
+    {
+        let query_result : mysql::QueryResult =
+            itry!(conn.prep_exec("SELECT lists.item_annotations.id, lists.items.id, lists.item_annotations.type, lists.item_annotations.body FROM lists.items JOIN lists.item_annotations ON lists.items.id = lists.item_annotations.item_id WHERE lists.items.list_id = ?", (list_id,)));
+        let annotations_result: mysql::error::Result<Vec<Annotation>> =
+            query_result.map(|row_result| {
+                let (id, item_id, kind, body) = mysql::from_row(try!(row_result));
+                return Ok(Annotation{
+                    id: id,
+                    item_id: item_id,
+                    kind: kind,
+                    body: body,
+                })
+            }).collect();
+        annotations = itry!(annotations_result);
+    }
+
+    let mut annotated_items : std::collections::BTreeMap<i64, AnnotatedItem> = std::collections::BTreeMap::new();
+    for item in &items {
+        // TODO(mrjones): Make AnnotatedItem be references?
+        annotated_items.insert(item.id, AnnotatedItem{item: item.clone(), annotations: Vec::new()});
+    }
+    for annotation in &annotations {
+        itry!(annotated_items.get_mut(&annotation.item_id)
+              .ok_or(ListsError::InconsistentDatabase("dangling annotation".to_string())))
+            .annotations.push(annotation.clone());
+    }
+
+    let annotated_items_vec : Vec<AnnotatedItem> = annotated_items.values().cloned().collect();
+
     let all_users;
     {
         let query_result : mysql::QueryResult =
@@ -342,7 +408,10 @@ fn show_list(list_id: &str, user: &User, conn: &mysql::Pool) -> iron::IronResult
         accessors = itry!(accessors_result);
     }
 
+    println!("{}", annotated_items_vec.to_json());
+
     data.insert("items".to_string(), items.to_json());
+    data.insert("annotated_items".to_string(), annotated_items_vec.to_json());
     data.insert("list_id".to_string(), list_id.to_json());
     data.insert("user_id".to_string(), user.id.to_json());
     data.insert("accessors".to_string(), accessors.to_json());

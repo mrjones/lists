@@ -1,8 +1,9 @@
 USE lists;
 
+DROP TABLE IF EXISTS item_annotations;
 DROP TABLE IF EXISTS items;
-DROP TABLE IF EXISTS lists;
 DROP TABLE IF EXISTS list_users;
+DROP TABLE IF EXISTS lists;
 DROP TABLE IF EXISTS users;
 
 CREATE TABLE users (
@@ -33,4 +34,13 @@ CREATE TABLE list_users (
        PRIMARY KEY(id),
        FOREIGN KEY(user_id) REFERENCES users(id),
        FOREIGN KEY(list_id) REFERENCES lists(id)
+);
+
+CREATE TABLE item_annotations (
+       id BIGINT NOT NULL AUTO_INCREMENT,
+       item_id BIGINT,
+       type INT,
+       body VARCHAR(255),
+       PRIMARY KEY(id),
+       FOREIGN KEY(item_id) REFERENCES items(id)
 );

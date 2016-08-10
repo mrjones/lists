@@ -1,5 +1,6 @@
 USE lists;
 
+DELETE FROM item_annotations;
 DELETE FROM items;
 DELETE FROM list_users;
 DELETE FROM lists;
@@ -22,3 +23,7 @@ INSERT INTO list_users (user_id, list_id) VALUES (2, 4);
 
 INSERT INTO items (id, list_id, name, description) VALUES (1, 1, "first item", "desc2");
 INSERT INTO items (id, list_id, name, description) VALUES (2, 1, "second item", "desc 2");
+INSERT INTO items (id, list_id, name, description) VALUES (3, 1, "google", "is a nice place to work");
+
+
+INSERT INTO item_annotations (id, item_id, type, body) VALUES (1, 3, 1, "http://www.google.com");
