@@ -77,7 +77,7 @@ impl ToJson for Item {
 struct Annotation {
     id: i64,
     item_id: i64,
-    kind: i32,
+    kind: String,
     body: String,
 }
 
@@ -351,7 +351,7 @@ fn show_list(list_id: &str, user: &User, conn: &mysql::Pool) -> iron::IronResult
     let annotations;
     {
         let query_result : mysql::QueryResult =
-            itry!(conn.prep_exec("SELECT lists.item_annotations.id, lists.items.id, lists.item_annotations.type, lists.item_annotations.body FROM lists.items JOIN lists.item_annotations ON lists.items.id = lists.item_annotations.item_id WHERE lists.items.list_id = ?", (list_id,)));
+            itry!(conn.prep_exec("SELECT lists.item_annotations.id, lists.items.id, lists.item_annotations.kind, lists.item_annotations.body FROM lists.items JOIN lists.item_annotations ON lists.items.id = lists.item_annotations.item_id WHERE lists.items.list_id = ?", (list_id,)));
         let annotations_result: mysql::error::Result<Vec<Annotation>> =
             query_result.map(|row_result| {
                 let (id, item_id, kind, body) = mysql::from_row(try!(row_result));

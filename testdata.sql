@@ -26,4 +26,4 @@ INSERT INTO items (id, list_id, name, description) VALUES (2, 1, "second item", 
 INSERT INTO items (id, list_id, name, description) VALUES (3, 1, "google", "is a nice place to work");
 
 
-INSERT INTO item_annotations (id, item_id, type, body) VALUES (1, 3, 1, "http://www.google.com");
+INSERT INTO item_annotations (id, item_id, kind, body) VALUES (1, 3, "LINK", "http://www.google.com");

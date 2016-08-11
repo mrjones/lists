@@ -39,7 +39,7 @@ CREATE TABLE list_users (
 CREATE TABLE item_annotations (
        id BIGINT NOT NULL AUTO_INCREMENT,
        item_id BIGINT,
-       type INT,
+       kind ENUM('LINK'),
        body VARCHAR(255),
        PRIMARY KEY(id),
        FOREIGN KEY(item_id) REFERENCES items(id)
