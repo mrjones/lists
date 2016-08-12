@@ -23,21 +23,32 @@ impl iron::typemap::Key for ConnectionPool {
     type Value = mysql::Pool;
 }
 
+// TODO(mrjones): This is really terrible :/
+// Reference: https://github.com/rust-lang-nursery/rustc-serialize/issues/46
+fn to_json<E: rustc_serialize::Encodable>(obj: &E) -> Json{
+    let str = rustc_serialize::json::encode(obj)
+        .expect("Could not encode object");
+    return rustc_serialize::json::Json::from_str(&str)
+        .expect("Could not re-decode object");
+}
+
+macro_rules! to_json_for_encodable {
+    ($($t:ty)*) => ($(
+        impl ToJson for $t {
+            fn to_json(&self) -> Json {
+                return to_json(self);
+            }
+        }
+    )*)
+}
+
 // maps to "Users" table in MySql
 #[derive(Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 struct User {
     id: i64,
     name: String,
 }
-
-impl ToJson for User {
-    fn to_json(&self) -> Json {
-            let mut m: std::collections::BTreeMap<String, Json> = std::collections::BTreeMap::new();
-            m.insert("name".to_string(), self.name.to_json());
-            m.insert("id".to_string(), self.id.to_json());
-            m.to_json()
-    }
-}
+to_json_for_encodable!(User);
 
 // maps to "Lists" table in MySql
 #[derive(Debug, PartialEq, Eq, RustcEncodable)]
@@ -45,15 +56,7 @@ struct List {
     id: i64,
     name: String,
 }
-
-impl ToJson for List {
-    fn to_json(&self) -> Json {
-            let mut m: std::collections::BTreeMap<String, Json> = std::collections::BTreeMap::new();
-            m.insert("name".to_string(), self.name.to_json());
-            m.insert("id".to_string(), self.id.to_json());
-            m.to_json()
-    }
-}
+to_json_for_encodable!(List);
 
 // maps to "Items" table in MySql
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable)]
@@ -62,16 +65,7 @@ struct Item {
     name: String,
     description: String,
 }
-
-impl ToJson for Item {
-    fn to_json(&self) -> Json {
-            let mut m: std::collections::BTreeMap<String, Json> = std::collections::BTreeMap::new();
-            m.insert("id".to_string(), self.id.to_json());
-            m.insert("name".to_string(), self.name.to_json());
-            m.insert("description".to_string(), self.description.to_json());
-            m.to_json()
-    }
-}
+to_json_for_encodable!(Item);
 
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable)]
 struct Annotation {
@@ -80,32 +74,14 @@ struct Annotation {
     kind: String,
     body: String,
 }
-
-impl ToJson for Annotation {
-    fn to_json(&self) -> Json {
-            let mut m: std::collections::BTreeMap<String, Json> = std::collections::BTreeMap::new();
-            m.insert("id".to_string(), self.id.to_json());
-            m.insert("item_id".to_string(), self.item_id.to_json());
-            m.insert("kind".to_string(), self.kind.to_json());
-            m.insert("body".to_string(), self.body.to_json());
-            m.to_json()
-    }
-}
+to_json_for_encodable!(Annotation);
 
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable)]
 struct AnnotatedItem {
     item: Item,
     annotations: Vec<Annotation>,
 }
-
-impl ToJson for AnnotatedItem {
-    fn to_json(&self) -> Json {
-            let mut m: std::collections::BTreeMap<String, Json> = std::collections::BTreeMap::new();
-            m.insert("item".to_string(), self.item.to_json());
-            m.insert("annotations".to_string(), self.annotations.to_json());
-            m.to_json()
-    }
-}
+to_json_for_encodable!(AnnotatedItem);
 
 #[derive(Debug, Clone)]
 enum ListsError {
@@ -256,7 +232,7 @@ fn pick_user_immutable_handler(req: &iron::request::Request) -> iron::IronResult
 
     let mut data : std::collections::BTreeMap<String, Json> =
         std::collections::BTreeMap::new();
-    data.insert("users".to_string(), users.to_json());
+    data.insert("users".to_string(), to_json(&users));
 
     let mut response = iron::response::Response::new();
     response
