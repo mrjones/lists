@@ -83,6 +83,37 @@ struct AnnotatedItem {
 }
 to_json_for_encodable!(AnnotatedItem);
 
+#[derive(RustcEncodable)]
+struct ListPage<'a> {
+    id: i64,
+    items: Vec<ListPageItem<'a>>,
+
+    owner: &'a User,
+    accessors: &'a Vec<User>,
+    all_users: &'a Vec<User>,
+}
+impl<'a> ToJson for ListPage<'a> {
+    fn to_json(&self) -> Json {
+      return to_json(self);
+    }
+}
+
+#[derive(RustcEncodable)]
+struct ListPageItem<'a> {
+    id: i64,
+    name: &'a str,
+    description: &'a str,
+
+    link_annotations: Vec<LinkAnnotation<'a>>,
+}
+
+#[derive(RustcEncodable)]
+struct LinkAnnotation<'a> {
+    url: &'a str,
+}
+
+
+
 #[derive(Debug, Clone)]
 enum ListsError {
     MissingParam(String),
@@ -384,14 +415,28 @@ fn show_list(list_id: &str, user: &User, conn: &mysql::Pool) -> iron::IronResult
         accessors = itry!(accessors_result);
     }
 
-    println!("{}", annotated_items_vec.to_json());
-
-    data.insert("items".to_string(), items.to_json());
-    data.insert("annotated_items".to_string(), annotated_items_vec.to_json());
-    data.insert("list_id".to_string(), list_id.to_json());
-    data.insert("user_id".to_string(), user.id.to_json());
-    data.insert("accessors".to_string(), accessors.to_json());
-    data.insert("all_users".to_string(), all_users.to_json());
+    let list_page = ListPage{
+        id: itry!(list_id.parse::<i64>()),
+        owner: &user,
+        accessors: &accessors,
+        all_users: &all_users,
+        items: annotated_items_vec.iter().map(|item| {
+            ListPageItem {
+                id: item.item.id,
+                name: &item.item.name,
+                description: &item.item.description,
+                link_annotations: item.annotations.iter()
+                    .filter(|annotation| {
+                        annotation.kind == "LINK"
+                    })
+                    .map(|annotation| {
+                        assert!(annotation.kind == "LINK");
+                        return LinkAnnotation{url: &annotation.body};
+                    }).collect(),
+            }
+        }).collect(),
+    };
+    data.insert("page".to_string(), list_page.to_json());
 
     let mut response = iron::response::Response::new();
     response

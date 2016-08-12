@@ -1,6 +1,6 @@
 <html>
   <head>
-    <title>List: {{id}}</title>
+    <title>List: {{page.id}}</title>
     <script language="javascript">
       function submitDeleteUserForm(user_id) {
         document.getElementById("removed_user_id").value = user_id;
@@ -10,22 +10,22 @@
   </head>
   <body>
     <dl>
-      {{#each annotated_items}}
-        <dt>{{item.name}}</dt>
+      {{#each page.items}}
+        <dt>{{name}}</dt>
         <dd>
-          {{item.description}}
+          {{description}}
           <ul>
-            {{#each annotations}}
-            <li>{{kind}} : {{body}}</li>
+            {{#each link_annotations}}
+            <a href="{{url}}">{{url}}</a>
             {{/each}}
           </ul>
         </dd>
         
       {{/each}}
     </dl>
-    <form action="/add_list_item?user_id={{user_id}}" method="post">
+    <form action="/add_list_item?user_id={{page.owner.id}}" method="post">
       Add item:<br/>
-      <input type="hidden" name="list_id" value="{{list_id}}" />
+      <input type="hidden" name="list_id" value="{{page.id}}" />
 
       <input type="text" name="name" /><br/>
       <textarea name="description"></textarea></br>
@@ -33,11 +33,11 @@
     </form>
     <hr/>
     Who can see this list?
-    <form action="/remove_list_user?user_id={{user_id}}" method="post" id="delete_user_form">
+    <form action="/remove_list_user?user_id={{page.owner.id}}" method="post" id="delete_user_form">
       <input type="hidden" id="removed_user_id" name="removed_user_id" value="not-set" />
-      <input type="hidden" name="list_id" value="{{list_id}}" />
+      <input type="hidden" name="list_id" value="{{page.id}}" />
     <ul>
-      {{#each accessors}}
+      {{#each page.accessors}}
       <li>
           {{name}}
           [<a href="javascript:submitDeleteUserForm({{id}});">-</a>]
@@ -47,10 +47,10 @@
     </ul>
     <hr/>
     Add another user:
-    <form action="/add_list_user?user_id={{user_id}}" method="post">
+    <form action="/add_list_user?user_id={{page.owner.id}}" method="post">
       <input type="hidden" name="list_id" value="{{../id}}" />
       <select name="new_user_id">
-        {{#each all_users}}
+        {{#each page.all_users}}
         <option value="{{id}}">{{name}}</option>
         {{/each}}
       </select>
