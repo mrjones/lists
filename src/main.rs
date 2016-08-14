@@ -50,6 +50,16 @@ struct User {
 }
 to_json_for_encodable!(User);
 
+impl User {
+    fn from_row(row: mysql::Row) -> User {
+        let (id, name) = mysql::from_row(row);
+        return User {
+            id: id,
+            name: name,
+        };
+    }
+}
+
 // maps to "Lists" table in MySql
 #[derive(Debug, PartialEq, Eq, RustcEncodable)]
 struct List {
@@ -67,6 +77,17 @@ struct Item {
 }
 to_json_for_encodable!(Item);
 
+impl Item {
+    fn from_row(row: mysql::Row) -> Item {
+        let (id, name, description) = mysql::from_row(row);
+        return Item {
+            id: id,
+            name: name,
+            description: description,
+        };
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable)]
 struct Annotation {
     id: i64,
@@ -75,6 +96,19 @@ struct Annotation {
     body: String,
 }
 to_json_for_encodable!(Annotation);
+
+impl Annotation {
+    fn from_row(row: mysql::Row) -> Annotation {
+        let (id, item_id, kind, body) = mysql::from_row(row);
+        return Annotation {
+            id: id,
+            item_id: item_id,
+            kind: kind,
+            body: body,
+        };
+    }
+}
+
 
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable)]
 struct AnnotatedItem {
@@ -195,8 +229,7 @@ impl iron::typemap::Key for RequestEnvBuilder { type Value = RequestEnv; }
 fn lookup_user(id: i64, db_conn: &mysql::Pool) -> iron::IronResult<User> {
     let mut result = itry!(db_conn.prep_exec("SELECT id, name FROM lists.users WHERE id = ?", (id,)));
     let row = itry!(result.next().ok_or(ListsError::DoesNotExist));
-    let (id, name) = mysql::from_row(itry!(row));
-    let user = User{id: id, name: name};
+    let user = User::from_row(itry!(row));
     assert!(result.next().is_none(), "Duplicate user id!");
     return Ok(user);
 }
@@ -253,11 +286,7 @@ fn pick_user_immutable_handler(req: &iron::request::Request) -> iron::IronResult
         itry!(conn.prep_exec("SELECT id, name FROM lists.users", ()));
     let users_result: mysql::error::Result<Vec<User>> =
         query_result.map(|row_result| {
-            let (id, name) = mysql::from_row(try!(row_result));
-            return Ok(User {
-                id: id,
-                name: name,
-            });
+            return Ok(User::from_row(try!(row_result)));
         }).collect();
     let users = itry!(users_result);
 
@@ -345,12 +374,7 @@ fn show_list(list_id: &str, user: &User, conn: &mysql::Pool) -> iron::IronResult
             itry!(conn.prep_exec("SELECT id, name, description FROM lists.items WHERE list_id = ?", (list_id,)));
         let items_result: mysql::error::Result<Vec<Item>> =
             query_result.map(|row_result| {
-                let (id, name, description) = mysql::from_row(try!(row_result));
-                return Ok(Item {
-                    id: id,
-                    name: name,
-                    description: description,
-                })
+                return Ok(Item::from_row(try!(row_result)));
             }).collect();
         items = itry!(items_result);
     }
@@ -361,13 +385,7 @@ fn show_list(list_id: &str, user: &User, conn: &mysql::Pool) -> iron::IronResult
             itry!(conn.prep_exec("SELECT lists.item_annotations.id, lists.items.id, lists.item_annotations.kind, lists.item_annotations.body FROM lists.items JOIN lists.item_annotations ON lists.items.id = lists.item_annotations.item_id WHERE lists.items.list_id = ?", (list_id,)));
         let annotations_result: mysql::error::Result<Vec<Annotation>> =
             query_result.map(|row_result| {
-                let (id, item_id, kind, body) = mysql::from_row(try!(row_result));
-                return Ok(Annotation{
-                    id: id,
-                    item_id: item_id,
-                    kind: kind,
-                    body: body,
-                })
+                return Ok(Annotation::from_row(try!(row_result)));
             }).collect();
         annotations = itry!(annotations_result);
     }
@@ -391,11 +409,7 @@ fn show_list(list_id: &str, user: &User, conn: &mysql::Pool) -> iron::IronResult
             itry!(conn.prep_exec("SELECT id, name FROM lists.users ORDER BY name ASC", ()));
         let all_users_result : mysql::error::Result<Vec<User>> =
             query_result.map(|row_result| {
-                let (id, name) = mysql::from_row(try!(row_result));
-                return Ok(User {
-                    id: id,
-                    name: name,
-                });
+                return Ok(User::from_row(try!(row_result)));
             }).collect();
         all_users = itry!(all_users_result);
     }
@@ -406,11 +420,7 @@ fn show_list(list_id: &str, user: &User, conn: &mysql::Pool) -> iron::IronResult
             itry!(conn.prep_exec("SELECT lists.users.id, lists.users.name FROM lists.list_users LEFT JOIN lists.users ON lists.list_users.user_id = lists.users.id WHERE lists.list_users.list_id = ?", (list_id,)));
         let accessors_result : mysql::error::Result<Vec<User>> =
             query_result.map(|row_result| {
-                let (id, name) = mysql::from_row(try!(row_result));
-                return Ok(User {
-                    id: id,
-                    name: name,
-                });
+                return Ok(User::from_row(try!(row_result)));
             }).collect();
         accessors = itry!(accessors_result);
     }
