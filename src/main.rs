@@ -366,14 +366,14 @@ fn show_one_list_handler(req: &mut iron::request::Request) -> iron::IronResult<i
     }
 }
 
+fn to_link_annotation<'a>(annotation: &'a Annotation) -> Option<LinkAnnotation<'a>> {
+    if annotation.kind != "LINK" {
+        return None
+    }
+    return Some(LinkAnnotation{url: &annotation.body});
+}
+
 fn show_list(list_id: &str, user: &User, conn: &mysql::Pool) -> iron::IronResult<iron::response::Response> {
-    let mut data : std::collections::BTreeMap<String, Json> =
-        std::collections::BTreeMap::new();
-
-    // Fetch metadata for list
-    // TODO(mrjones): fetch name from DB
-    data.insert("id".to_string(), list_id.to_json());
-
     let items = itry!(to_vector::<Item>(
         itry!(conn.prep_exec("SELECT id, name, description FROM lists.items WHERE list_id = ?", (list_id,)))));
 
@@ -401,6 +401,7 @@ fn show_list(list_id: &str, user: &User, conn: &mysql::Pool) -> iron::IronResult
         itry!(conn.prep_exec("SELECT lists.users.id, lists.users.name FROM lists.list_users LEFT JOIN lists.users ON lists.list_users.user_id = lists.users.id WHERE lists.list_users.list_id = ?", (list_id,)))));
 
     let list_page = ListPage{
+        // TODO(mrjones): fetch name from DB
         id: itry!(list_id.parse::<i64>()),
         owner: &user,
         accessors: &accessors,
@@ -411,16 +412,13 @@ fn show_list(list_id: &str, user: &User, conn: &mysql::Pool) -> iron::IronResult
                 name: &item.item.name,
                 description: &item.item.description,
                 link_annotations: item.annotations.iter()
-                    .filter(|annotation| {
-                        annotation.kind == "LINK"
-                    })
-                    .map(|annotation| {
-                        assert!(annotation.kind == "LINK");
-                        return LinkAnnotation{url: &annotation.body};
-                    }).collect(),
+                    .filter_map(to_link_annotation).collect(),
             }
         }).collect(),
     };
+
+    let mut data : std::collections::BTreeMap<String, Json> =
+        std::collections::BTreeMap::new();
     data.insert("page".to_string(), list_page.to_json());
 
     let mut response = iron::response::Response::new();
