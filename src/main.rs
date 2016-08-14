@@ -42,6 +42,10 @@ macro_rules! to_json_for_encodable {
     )*)
 }
 
+trait DbObject {
+    fn from_row(row: mysql::Row) -> Self;
+}
+
 // maps to "Users" table in MySql
 #[derive(Debug, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 struct User {
@@ -50,7 +54,7 @@ struct User {
 }
 to_json_for_encodable!(User);
 
-impl User {
+impl DbObject for User {
     fn from_row(row: mysql::Row) -> User {
         let (id, name) = mysql::from_row(row);
         return User {
@@ -68,6 +72,16 @@ struct List {
 }
 to_json_for_encodable!(List);
 
+impl DbObject for List {
+    fn from_row(row: mysql::Row) -> List {
+        let (id, name) = mysql::from_row(row);
+        return List {
+            id: id,
+            name: name,
+        };
+    }
+}
+
 // maps to "Items" table in MySql
 #[derive(Clone, Debug, PartialEq, Eq, RustcEncodable)]
 struct Item {
@@ -77,7 +91,7 @@ struct Item {
 }
 to_json_for_encodable!(Item);
 
-impl Item {
+impl DbObject for Item {
     fn from_row(row: mysql::Row) -> Item {
         let (id, name, description) = mysql::from_row(row);
         return Item {
@@ -97,7 +111,7 @@ struct Annotation {
 }
 to_json_for_encodable!(Annotation);
 
-impl Annotation {
+impl DbObject for Annotation {
     fn from_row(row: mysql::Row) -> Annotation {
         let (id, item_id, kind, body) = mysql::from_row(row);
         return Annotation {
@@ -279,16 +293,17 @@ fn pick_user_handler(req: &mut iron::request::Request) -> iron::IronResult<iron:
     return pick_user_immutable_handler(req);
 }
 
+fn to_vector<T: DbObject>(query_result: mysql::QueryResult) -> mysql::error::Result<Vec<T>> {
+    return query_result.map(|row_result| {
+        return Ok(T::from_row(try!(row_result)));
+    }).collect();
+}
+
 fn pick_user_immutable_handler(req: &iron::request::Request) -> iron::IronResult<iron::response::Response> {
     let conn = &req.extensions.get::<persistent::Read<ConnectionPool>>().unwrap();
 
-    let query_result : mysql::QueryResult =
-        itry!(conn.prep_exec("SELECT id, name FROM lists.users", ()));
-    let users_result: mysql::error::Result<Vec<User>> =
-        query_result.map(|row_result| {
-            return Ok(User::from_row(try!(row_result)));
-        }).collect();
-    let users = itry!(users_result);
+    let users = itry!(to_vector::<User>(
+        itry!(conn.prep_exec("SELECT id, name FROM lists.users", ()))));
 
     let mut data : std::collections::BTreeMap<String, Json> =
         std::collections::BTreeMap::new();
@@ -302,17 +317,8 @@ fn pick_user_immutable_handler(req: &iron::request::Request) -> iron::IronResult
 }
 
 fn show_all_lists(user: &User, conn: &mysql::Pool) -> iron::IronResult<iron::response::Response> {
-    let query_result : mysql::QueryResult = 
-        itry!(conn.prep_exec("SELECT lists.lists.id, lists.lists.name FROM lists.list_users LEFT JOIN lists.lists ON lists.list_users.list_id = lists.lists.id WHERE lists.list_users.user_id = ?", (user.id,)));
-    let lists_result: mysql::error::Result<Vec<List>> =
-        query_result.map(|row_result| {
-            let (id, name) = mysql::from_row(try!(row_result));
-            return Ok(List {
-                id: id,
-                name: name,
-            });
-        }).collect();
-    let lists = itry!(lists_result);
+    let lists = itry!(to_vector::<List>(
+        itry!(conn.prep_exec("SELECT lists.lists.id, lists.lists.name FROM lists.list_users LEFT JOIN lists.lists ON lists.list_users.list_id = lists.lists.id WHERE lists.list_users.user_id = ?", (user.id,)))));
 
     let mut data : std::collections::BTreeMap<String, Json> =
         std::collections::BTreeMap::new();
@@ -368,27 +374,12 @@ fn show_list(list_id: &str, user: &User, conn: &mysql::Pool) -> iron::IronResult
     // TODO(mrjones): fetch name from DB
     data.insert("id".to_string(), list_id.to_json());
 
-    let items;
-    {
-        let query_result : mysql::QueryResult =
-            itry!(conn.prep_exec("SELECT id, name, description FROM lists.items WHERE list_id = ?", (list_id,)));
-        let items_result: mysql::error::Result<Vec<Item>> =
-            query_result.map(|row_result| {
-                return Ok(Item::from_row(try!(row_result)));
-            }).collect();
-        items = itry!(items_result);
-    }
+    let items = itry!(to_vector::<Item>(
+        itry!(conn.prep_exec("SELECT id, name, description FROM lists.items WHERE list_id = ?", (list_id,)))));
 
-    let annotations;
-    {
-        let query_result : mysql::QueryResult =
-            itry!(conn.prep_exec("SELECT lists.item_annotations.id, lists.items.id, lists.item_annotations.kind, lists.item_annotations.body FROM lists.items JOIN lists.item_annotations ON lists.items.id = lists.item_annotations.item_id WHERE lists.items.list_id = ?", (list_id,)));
-        let annotations_result: mysql::error::Result<Vec<Annotation>> =
-            query_result.map(|row_result| {
-                return Ok(Annotation::from_row(try!(row_result)));
-            }).collect();
-        annotations = itry!(annotations_result);
-    }
+
+    let annotations = itry!(to_vector::<Annotation>(
+        itry!(conn.prep_exec("SELECT lists.item_annotations.id, lists.items.id, lists.item_annotations.kind, lists.item_annotations.body FROM lists.items JOIN lists.item_annotations ON lists.items.id = lists.item_annotations.item_id WHERE lists.items.list_id = ?", (list_id,)))));
 
     let mut annotated_items : std::collections::BTreeMap<i64, AnnotatedItem> = std::collections::BTreeMap::new();
     for item in &items {
@@ -403,27 +394,11 @@ fn show_list(list_id: &str, user: &User, conn: &mysql::Pool) -> iron::IronResult
 
     let annotated_items_vec : Vec<AnnotatedItem> = annotated_items.values().cloned().collect();
 
-    let all_users;
-    {
-        let query_result : mysql::QueryResult =
-            itry!(conn.prep_exec("SELECT id, name FROM lists.users ORDER BY name ASC", ()));
-        let all_users_result : mysql::error::Result<Vec<User>> =
-            query_result.map(|row_result| {
-                return Ok(User::from_row(try!(row_result)));
-            }).collect();
-        all_users = itry!(all_users_result);
-    }
+    let all_users = itry!(to_vector::<User>(
+        itry!(conn.prep_exec("SELECT id, name FROM lists.users ORDER BY name ASC", ()))));
     
-    let accessors;
-    {
-        let query_result : mysql::QueryResult =
-            itry!(conn.prep_exec("SELECT lists.users.id, lists.users.name FROM lists.list_users LEFT JOIN lists.users ON lists.list_users.user_id = lists.users.id WHERE lists.list_users.list_id = ?", (list_id,)));
-        let accessors_result : mysql::error::Result<Vec<User>> =
-            query_result.map(|row_result| {
-                return Ok(User::from_row(try!(row_result)));
-            }).collect();
-        accessors = itry!(accessors_result);
-    }
+    let accessors = itry!(to_vector::<User>(
+        itry!(conn.prep_exec("SELECT lists.users.id, lists.users.name FROM lists.list_users LEFT JOIN lists.users ON lists.list_users.user_id = lists.users.id WHERE lists.list_users.list_id = ?", (list_id,)))));
 
     let list_page = ListPage{
         id: itry!(list_id.parse::<i64>()),
