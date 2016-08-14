@@ -473,7 +473,7 @@ fn add_list_item_handler(req: &mut iron::request::Request) -> iron::IronResult<i
             let name = itry!(body_params.get("name").ok_or(
                 ListsError::MissingParam("name".to_string())));
             let description = itry!(body_params.get("description").ok_or(
-                ListsError::MissingParam("desceiption".to_string())));
+                ListsError::MissingParam("description".to_string())));
 
             itry!(conn.prep_exec("INSERT INTO lists.items (list_id, name, description) VALUES (?, ?, ?)", (list_id, name, description)));
             return show_list(list_id, user, conn);
