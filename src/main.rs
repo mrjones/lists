@@ -554,40 +554,75 @@ fn remove_list_user_handler(req: &mut iron::request::Request) -> iron::IronResul
     }
 }
 
-struct Greeting {
-    msg: &'static str,
+struct ServerContext {
+    conn_pool: Box<mysql::Pool>
 }
 
-impl rustful::Handler for Greeting {
-    fn handle_request(&self, context: rustful::Context, response: rustful::Response) {
-        //Check if the client accessed /hello/:name or /good_bye/:name
-        if let Some(name) = context.variables.get("name") {
-            //Use the value of :name
-            response.send(format!("{}, {}", self.msg, name));
-        } else {
-            response.send(self.msg)
+struct UsersEndpoint {
+}
+
+fn list_users(context: rustful::Context, mut response: rustful::Response) {
+    let ctx : &ServerContext;
+    {
+        let glb : &rustful::server::Global = context.global;
+        let mctx : Option<&ServerContext> = glb.get();
+        ctx = mctx.unwrap();
+    }
+    let users = to_vector::<User>(
+        ctx.conn_pool.prep_exec("SELECT id, name FROM lists.users", ())
+        .expect("SELECT")).expect("collect");
+
+    response.send(rustc_serialize::json::encode(&users).unwrap());
+}
+
+enum Api {
+    StaticFile{
+        filename: &'static str
+    },
+    DynamicHandler{
+        handler: fn(rustful::Context, rustful::Response)
+    }
+}
+
+impl rustful::Handler for Api {
+    fn handle_request(&self, context: rustful::Context, mut response: rustful::Response) {
+        match *self {
+            Api::StaticFile { ref filename } => {
+                let res = response.send_file(filename)
+                    .or_else(|e| e.send_not_found("the file was not found"))
+                    .or_else(|e| e.ignore_send_error());
+            },
+            Api::DynamicHandler { ref handler } => {
+                handler(context, response);
+            }
         }
     }
 }
-                
-                
-fn serve_rustful() {
+
+fn serve_rustful(port: u16) {
     let my_router = insert_routes!{
         rustful::TreeRouter::new() => {
+            Get: Api::StaticFile{filename: "static/index.html"},
+            "/static/app.js" => {
+                Get: Api::StaticFile{filename: "static/app.js"},
+            },
             "users" => {
-                Get: Greeting{msg: "hello"},
-                ":name" => Get: Greeting{msg: "hello"}
+                Get: Api::DynamicHandler{handler: list_users},
             }
         }
+    };
+
+    let server_context = ServerContext{
+        conn_pool: Box::new(mysql::Pool::new("mysql://lists:lists@localhost").unwrap()),
     };
     
     match (rustful::Server{
         handlers: my_router,
-//        host: (std::net::Ipv4Addr::new(127, 0, 0, 1), 2346).into(),
-        host: (std::net::Ipv4Addr::new(0, 0, 0, 0), 2346).into(),
+        global: Box::new(server_context).into(),
+        host: rustful::server::Host::any_v4(port),
         ..rustful::Server::default()
     }.run()) {
-        Ok(_server) => println!("Serving rustful"),
+        Ok(_server) => println!("Serving rustful on port {}", port),
         Err(_) => println!("Could not start rustful server.")
     }
 }
@@ -600,7 +635,7 @@ fn main() {
         panic!("{:?}", r);
     }
 
-    std::thread::spawn(serve_rustful);
+    std::thread::spawn(|| { serve_rustful(2346); });
     
     let mut router = Router::new();
     router.get(r"/lists", show_all_lists_handler);
@@ -631,6 +666,6 @@ fn main() {
     chain.link_after(ErrorPage);
     chain.link_after(handlebars);
     
-    println!("Serving on port 2345");
+    println!("Serving iron on port 2345");
     iron::Iron::new(chain).http("0.0.0.0:2345").unwrap();
 }
