@@ -1,9 +1,31 @@
+var UserPicker = React.createClass({
+  getInitialState : function() {
+    return {users: [
+      {name: "Matt", id: 1},
+      {name: "Cristina", id:2},
+    ]};
+  },
+  render: function() {
+    var userNodes = this.state.users.map(function(user) {
+      return (
+        <div className="user" key={user.id}>
+          {user.name}
+        </div>
+      );
+    });
+    
+    return (
+      <div className="userPicker">
+        {userNodes}
+      </div>
+    );
+  },
+});
+
 var Widget = React.createClass({
   render: function() {
     return (
-      <div className="widget">
-        <h2>Welcome, world!</h2>
-      </div>
+      <UserPicker />
     );
   }
 });
