@@ -1,11 +1,13 @@
 extern crate handlebars_iron;
 #[macro_use]
 extern crate iron;
+extern crate mount;
 extern crate mysql;
 extern crate router;
 extern crate persistent;
 extern crate plugin;
 extern crate rustc_serialize;
+extern crate staticfile;
 extern crate url;
 
 use iron::prelude::*;
@@ -25,7 +27,7 @@ impl iron::typemap::Key for ConnectionPool {
 
 // TODO(mrjones): This is really terrible :/
 // Reference: https://github.com/rust-lang-nursery/rustc-serialize/issues/46
-fn to_json<E: rustc_serialize::Encodable>(obj: &E) -> Json{
+fn to_json<E: rustc_serialize::Encodable>(obj: &E) -> Json {
     let str = rustc_serialize::json::encode(obj)
         .expect("Could not encode object");
     return rustc_serialize::json::Json::from_str(&str)
@@ -83,7 +85,7 @@ impl DbObject for List {
 }
 
 // maps to "Items" table in MySql
-#[derive(Clone, Debug, PartialEq, Eq, RustcEncodable)]
+#[derive(Clone, Debug, PartialEq, Eq, RustcDecodable, RustcEncodable)]
 struct Item {
     id: i64,
     name: String,
@@ -102,7 +104,7 @@ impl DbObject for Item {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, RustcEncodable)]
+#[derive(Clone, Debug, PartialEq, Eq, RustcDecodable, RustcEncodable)]
 struct Annotation {
     id: i64,
     item_id: i64,
@@ -124,7 +126,7 @@ impl DbObject for Annotation {
 }
 
 
-#[derive(Clone, Debug, PartialEq, Eq, RustcEncodable)]
+#[derive(Clone, Debug, PartialEq, Eq, RustcDecodable, RustcEncodable)]
 struct AnnotatedItem {
     item: Item,
     annotations: Vec<Annotation>,
@@ -457,6 +459,22 @@ fn add_list_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::
     }    
 }
 
+fn add_list_item_json_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::response::Response> {
+    let body = read_body(req);
+    let conn = &req.get::<persistent::Read<ConnectionPool>>().unwrap();
+    let env = &req.extensions().get::<RequestEnvBuilder>().unwrap();
+
+    match env.user {
+        Err(_) => return pick_user_immutable_handler(req),
+        Ok(ref user) => {
+            let item : AnnotatedItem = rustc_serialize::json::decode(&body)
+                .expect("Couldn't parse JSON");
+            println!("Parsed {:?}.", item);
+            return Ok(iron::response::Response::new());
+        }
+    }
+}
+
 fn add_list_item_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::response::Response> {
     let body = read_body(req);
     let conn = &req.get::<persistent::Read<ConnectionPool>>().unwrap();
@@ -476,6 +494,15 @@ fn add_list_item_handler(req: &mut iron::request::Request) -> iron::IronResult<i
                 ListsError::MissingParam("description".to_string())));
 
             itry!(conn.prep_exec("INSERT INTO lists.items (list_id, name, description) VALUES (?, ?, ?)", (list_id, name, description)));
+
+            let maybe_link = body_params.get("link");
+            if maybe_link.is_some() && !maybe_link.unwrap().is_empty() {
+                let link_str = maybe_link.unwrap();
+                itry!(url::Url::parse(link_str));
+
+                itry!(conn.prep_exec("INSERT INTO lists.item_annotations (item_id, kind, body) VALUES (LAST_INSERT_ID(), 'LINK', ?)", (link_str,)));
+            }
+
             return show_list(list_id, user, conn);
         },
     }
@@ -533,18 +560,26 @@ fn main() {
         panic!("{:?}", r);
     }
 
-    println!("Running.");
+    
+    
     let mut router = Router::new();
     router.get(r"/lists", show_all_lists_handler);
     router.get(r"/list", show_one_list_handler);
     router.get(r"/users", pick_user_handler);
     router.any(r"/add_list_item", add_list_item_handler);
+    router.any(r"/add_list_item_json", add_list_item_json_handler);
     router.any(r"/add_list_user", add_list_user_handler);
     router.any(r"/add_list", add_list_handler);
     router.any(r"/remove_list_user", remove_list_user_handler);
     router.get(r"/", show_all_lists_handler);
     
-    let mut chain = iron::Chain::new(router);
+    println!("Running.");
+    let mut mount = mount::Mount::new();
+    mount.mount("/", router);
+    mount.mount("/static/", staticfile::Static::new(
+        std::path::Path::new("static")));
+        
+    let mut chain = iron::Chain::new(mount);
 
     let pool_reader : persistent::Read<ConnectionPool> = 
         persistent::Read::<ConnectionPool>::one(
