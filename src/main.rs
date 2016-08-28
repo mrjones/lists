@@ -6,6 +6,8 @@ extern crate mysql;
 extern crate router;
 extern crate persistent;
 extern crate plugin;
+#[macro_use]
+extern crate rustful;
 extern crate rustc_serialize;
 extern crate staticfile;
 extern crate url;
@@ -552,6 +554,44 @@ fn remove_list_user_handler(req: &mut iron::request::Request) -> iron::IronResul
     }
 }
 
+struct Greeting {
+    msg: &'static str,
+}
+
+impl rustful::Handler for Greeting {
+    fn handle_request(&self, context: rustful::Context, response: rustful::Response) {
+        //Check if the client accessed /hello/:name or /good_bye/:name
+        if let Some(name) = context.variables.get("name") {
+            //Use the value of :name
+            response.send(format!("{}, {}", self.msg, name));
+        } else {
+            response.send(self.msg)
+        }
+    }
+}
+                
+                
+fn serve_rustful() {
+    let my_router = insert_routes!{
+        rustful::TreeRouter::new() => {
+            "users" => {
+                Get: Greeting{msg: "hello"},
+                ":name" => Get: Greeting{msg: "hello"}
+            }
+        }
+    };
+    
+    match (rustful::Server{
+        handlers: my_router,
+//        host: (std::net::Ipv4Addr::new(127, 0, 0, 1), 2346).into(),
+        host: (std::net::Ipv4Addr::new(0, 0, 0, 0), 2346).into(),
+        ..rustful::Server::default()
+    }.run()) {
+        Ok(_server) => println!("Serving rustful"),
+        Err(_) => println!("Could not start rustful server.")
+    }
+}
+
 fn main() {
     let mut handlebars = handlebars_iron::HandlebarsEngine::new();
     handlebars.add(Box::new(
@@ -560,7 +600,7 @@ fn main() {
         panic!("{:?}", r);
     }
 
-    
+    std::thread::spawn(serve_rustful);
     
     let mut router = Router::new();
     router.get(r"/lists", show_all_lists_handler);
@@ -590,7 +630,7 @@ fn main() {
     });
     chain.link_after(ErrorPage);
     chain.link_after(handlebars);
-
+    
     println!("Serving on port 2345");
     iron::Iron::new(chain).http("0.0.0.0:2345").unwrap();
 }
