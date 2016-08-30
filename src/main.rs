@@ -578,21 +578,18 @@ struct ServerContext {
     conn_pool: Box<mysql::Pool>
 }
 
-fn list_users(server_context: &ServerContext, _: rustful::Context, response: rustful::Response) -> ListsResult<()> {
+fn list_users(server_context: &ServerContext, _: rustful::Context) -> ListsResult<Box<ToJson>> {
     match fetch_all_users(server_context.conn_pool.as_ref()) {
-        Ok(users) => response.send(rustc_serialize::json::encode(&users).unwrap()),
+        Ok(users) => return Ok(Box::new(users)),
         Err(_) => return Err(ListsError::DatabaseError),
     }
-    
-    return Ok(());
 }
 
-fn all_lists(server_context: &ServerContext, user: &User, _: rustful::Context, response: rustful::Response) -> ListsResult<()> {
+fn all_lists(server_context: &ServerContext, user: &User, _: rustful::Context) -> ListsResult<Box<ToJson>> {
     match fetch_all_lists(user, server_context.conn_pool.as_ref()) {
-        Ok(lists) => response.send(rustc_serialize::json::encode(&lists).unwrap()),
+        Ok(lists) => return Ok(Box::new(lists)),
         Err(_) => return Err(ListsError::DatabaseError),
     }
-    return Ok(());
 }
 
 enum Api {
@@ -600,10 +597,11 @@ enum Api {
         filename: &'static str
     },
     LoggedInHandler {
-        handler: fn(&ServerContext, &User, rustful::Context, rustful::Response) -> ListsResult<()>
+        // TODO(mrjones): "Encodable" would be nicer than "ToJson"...
+        handler: fn(&ServerContext, &User, rustful::Context) -> ListsResult<Box<ToJson>>
     },
     LoggedOutHandler{
-        handler: fn(&ServerContext, rustful::Context, rustful::Response) -> ListsResult<()>
+        handler: fn(&ServerContext, rustful::Context) -> ListsResult<Box<ToJson>>
     }
 }
 
@@ -618,8 +616,9 @@ impl rustful::Handler for Api {
             Api::LoggedOutHandler { ref handler } => {
                 let server_context : &ServerContext =
                     context.global.get().expect("Couldn't get server_context");
-                match handler(server_context, context, response) {
-                    Ok(_) => (),
+                match handler(server_context, context) {
+                    Ok(obj) => response.send(rustc_serialize::json::encode(
+                        &obj.to_json()).unwrap()),
                     Err(err) => println!("ERROR! {:?}", err),
                 }
             },
@@ -634,12 +633,13 @@ impl rustful::Handler for Api {
                     .expect("couldn't parse user_id");
                 let user = lookup_user(user_id, server_context.conn_pool.as_ref())
                     .expect("couldn't look up user");
-                match handler(server_context, &user, context, response) {
-                    Ok(_) => (),
+
+                match handler(server_context, &user, context) {
+                    Ok(obj) => response.send(rustc_serialize::json::encode(
+                        &obj.to_json()).unwrap()),
                     Err(err) => println!("ERROR! {:?}", err),
                 }
             }
-
         }
     }
 }
