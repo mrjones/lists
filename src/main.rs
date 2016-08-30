@@ -578,20 +578,26 @@ struct ServerContext {
     conn_pool: Box<mysql::Pool>
 }
 
-fn list_users(context: rustful::Context, response: rustful::Response) -> ListsResult<()> {
-    let ctx : &ServerContext;
-    {
-        let glb : &rustful::server::Global = context.global;
-        let mctx : Option<&ServerContext> = glb.get();
-        ctx = mctx.unwrap();
-    }
-
-    match fetch_all_users(ctx.conn_pool.as_ref()) {
+fn list_users(server_context: &ServerContext, _: rustful::Context, response: rustful::Response) -> ListsResult<()> {
+    match fetch_all_users(server_context.conn_pool.as_ref()) {
         Ok(users) => response.send(rustc_serialize::json::encode(&users).unwrap()),
-        Err(err) => return Err(ListsError::DatabaseError),
+        Err(_) => return Err(ListsError::DatabaseError),
     }
     
+    return Ok(());
+}
 
+fn all_lists(server_context: &ServerContext, _: rustful::Context, response: rustful::Response) -> ListsResult<()> {
+    // TODO(mrjones): fix
+    let user = match lookup_user(1, server_context.conn_pool.as_ref()) {
+        Ok(u) => u,
+        Err(_) => return Err(ListsError::DatabaseError),
+    };
+    
+    match fetch_all_lists(&user, server_context.conn_pool.as_ref()) {
+        Ok(lists) => response.send(rustc_serialize::json::encode(&lists).unwrap()),
+        Err(_) => return Err(ListsError::DatabaseError),
+    }
     return Ok(());
 }
 
@@ -600,7 +606,7 @@ enum Api {
         filename: &'static str
     },
     DynamicHandler{
-        handler: fn(rustful::Context, rustful::Response) -> ListsResult<()>
+        handler: fn(&ServerContext, rustful::Context, rustful::Response) -> ListsResult<()>
     }
 }
 
@@ -613,7 +619,9 @@ impl rustful::Handler for Api {
                     .or_else(|e| e.ignore_send_error());
             },
             Api::DynamicHandler { ref handler } => {
-                match handler(context, response) {
+                let server_context : &ServerContext =
+                    context.global.get().expect("Couldn't get server_context");
+                match handler(server_context, context, response) {
                     Ok(_) => (),
                     Err(err) => println!("ERROR! {:?}", err),
                 }
@@ -631,6 +639,9 @@ fn serve_rustful(port: u16) {
             },
             "/users" => {
                 Get: Api::DynamicHandler{handler: list_users},
+            },
+            "/lists" => {
+                Get: Api::DynamicHandler{handler: all_lists},
             }
         }
     };
