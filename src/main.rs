@@ -587,14 +587,8 @@ fn list_users(server_context: &ServerContext, _: rustful::Context, response: rus
     return Ok(());
 }
 
-fn all_lists(server_context: &ServerContext, _: rustful::Context, response: rustful::Response) -> ListsResult<()> {
-    // TODO(mrjones): fix
-    let user = match lookup_user(1, server_context.conn_pool.as_ref()) {
-        Ok(u) => u,
-        Err(_) => return Err(ListsError::DatabaseError),
-    };
-    
-    match fetch_all_lists(&user, server_context.conn_pool.as_ref()) {
+fn all_lists(server_context: &ServerContext, user: &User, _: rustful::Context, response: rustful::Response) -> ListsResult<()> {
+    match fetch_all_lists(user, server_context.conn_pool.as_ref()) {
         Ok(lists) => response.send(rustc_serialize::json::encode(&lists).unwrap()),
         Err(_) => return Err(ListsError::DatabaseError),
     }
@@ -605,7 +599,10 @@ enum Api {
     StaticFile{
         filename: &'static str
     },
-    DynamicHandler{
+    LoggedInHandler {
+        handler: fn(&ServerContext, &User, rustful::Context, rustful::Response) -> ListsResult<()>
+    },
+    LoggedOutHandler{
         handler: fn(&ServerContext, rustful::Context, rustful::Response) -> ListsResult<()>
     }
 }
@@ -618,14 +615,31 @@ impl rustful::Handler for Api {
                     .or_else(|e| e.send_not_found("the file was not found"))
                     .or_else(|e| e.ignore_send_error());
             },
-            Api::DynamicHandler { ref handler } => {
+            Api::LoggedOutHandler { ref handler } => {
                 let server_context : &ServerContext =
                     context.global.get().expect("Couldn't get server_context");
                 match handler(server_context, context, response) {
                     Ok(_) => (),
                     Err(err) => println!("ERROR! {:?}", err),
                 }
+            },
+            Api::LoggedInHandler { ref handler } => {
+                let server_context : &ServerContext =
+                    context.global.get().expect("Couldn't get server_context");
+
+                let user_id = context.variables.get("user_id")
+                    .expect("no user_id param")
+                    .to_string()
+                    .parse::<i64>()
+                    .expect("couldn't parse user_id");
+                let user = lookup_user(user_id, server_context.conn_pool.as_ref())
+                    .expect("couldn't look up user");
+                match handler(server_context, &user, context, response) {
+                    Ok(_) => (),
+                    Err(err) => println!("ERROR! {:?}", err),
+                }
             }
+
         }
     }
 }
@@ -638,10 +652,10 @@ fn serve_rustful(port: u16) {
                 Get: Api::StaticFile{filename: "static/app.js"},
             },
             "/users" => {
-                Get: Api::DynamicHandler{handler: list_users},
+                Get: Api::LoggedOutHandler{handler: list_users},
             },
             "/lists" => {
-                Get: Api::DynamicHandler{handler: all_lists},
+                ":user_id" => Get: Api::LoggedInHandler{handler: all_lists},
             }
         }
     };

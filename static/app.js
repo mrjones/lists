@@ -36,12 +36,36 @@ var UserPicker = React.createClass({
 });
 
 var ListPicker = React.createClass({
+  getInitialState: function() {
+    return {lists: []};
+  },
+  componentDidMount: function() {
+    $.ajax({
+      url: `/lists/${this.props.params.userId}`,
+      dataType: 'json',
+      cache: false,
+      success: function(data) {
+        console.log(data);
+        this.setState({lists: data});
+      }.bind(this),
+      error: function(xhr, status, err) {
+        console.error(this.props.url, status, err.toString());        
+      }.bind(this)
+    });
+  },
   render: function() {
+    var listNodes = this.state.lists.map(function(list) {
+      return (
+        <div className="list" key={list.id}>
+          {list.name}
+        </div>
+      );
+    });
     return (
       <div>
-        Hello user_id #{this.props.params.userId}!
+        {listNodes}
       </div>
-    )
+    );
   }
 });
 
