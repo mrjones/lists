@@ -177,6 +177,16 @@ enum ListsError {
     Unknown,
 }
 
+//macro_rules! ltry {
+//    ($result:expr) => match $result {
+//        ::std::result::Result::Ok(val) => val,
+//        ::std::result::Result::Err(err) => return ::std::result::Result::Err(
+//            ListsError
+//    }
+//}
+
+type ListsResult<T> = Result<T, ListsError>;
+
 impl ListsError {
     fn str(&self) -> &str {
         match *self {
@@ -190,6 +200,8 @@ impl ListsError {
         }
     }
 }
+
+
 
 impl std::error::Error for ListsError {
     fn description(&self) -> &str {
@@ -232,6 +244,16 @@ impl iron::middleware::AfterMiddleware for ErrorPage {
         return Ok(iron::response::Response::with(
             (iron::status::NotFound, format!("ERROR PAGE!!\n{:?}", err).to_string())));
     }
+}
+
+fn fetch_all_lists(user: &User, conn: &mysql::Pool) -> Result<Vec<List>, mysql::Error> {
+    return to_vector::<List>(
+        try!(conn.prep_exec("SELECT lists.lists.id, lists.lists.name FROM lists.list_users LEFT JOIN lists.lists ON lists.list_users.list_id = lists.lists.id WHERE lists.list_users.user_id = ?", (user.id,))));
+}
+
+fn fetch_all_users(conn: &mysql::Pool) -> Result<Vec<User>, mysql::Error> {
+    return to_vector::<User>(
+        try!(conn.prep_exec("SELECT id, name FROM lists.users", ())))
 }
 
 struct RequestEnv {
@@ -305,9 +327,7 @@ fn to_vector<T: DbObject>(query_result: mysql::QueryResult) -> mysql::error::Res
 
 fn pick_user_immutable_handler(req: &iron::request::Request) -> iron::IronResult<iron::response::Response> {
     let conn = &req.extensions.get::<persistent::Read<ConnectionPool>>().unwrap();
-
-    let users = itry!(to_vector::<User>(
-        itry!(conn.prep_exec("SELECT id, name FROM lists.users", ()))));
+    let users = itry!(fetch_all_users(conn));
 
     let mut data : std::collections::BTreeMap<String, Json> =
         std::collections::BTreeMap::new();
@@ -320,13 +340,13 @@ fn pick_user_immutable_handler(req: &iron::request::Request) -> iron::IronResult
     return Ok(response);
 }
 
+
 fn show_all_lists(user: &User, conn: &mysql::Pool) -> iron::IronResult<iron::response::Response> {
-    let lists = itry!(to_vector::<List>(
-        itry!(conn.prep_exec("SELECT lists.lists.id, lists.lists.name FROM lists.list_users LEFT JOIN lists.lists ON lists.list_users.list_id = lists.lists.id WHERE lists.list_users.user_id = ?", (user.id,)))));
 
     let mut data : std::collections::BTreeMap<String, Json> =
         std::collections::BTreeMap::new();
-    data.insert("lists".to_string(), lists.to_json());
+    data.insert("lists".to_string(),
+                itry!(fetch_all_lists(user, conn)).to_json());
     data.insert("user_id".to_string(), user.id.to_json());
     
     let mut response = iron::response::Response::new();
@@ -558,21 +578,21 @@ struct ServerContext {
     conn_pool: Box<mysql::Pool>
 }
 
-struct UsersEndpoint {
-}
-
-fn list_users(context: rustful::Context, mut response: rustful::Response) {
+fn list_users(context: rustful::Context, response: rustful::Response) -> ListsResult<()> {
     let ctx : &ServerContext;
     {
         let glb : &rustful::server::Global = context.global;
         let mctx : Option<&ServerContext> = glb.get();
         ctx = mctx.unwrap();
     }
-    let users = to_vector::<User>(
-        ctx.conn_pool.prep_exec("SELECT id, name FROM lists.users", ())
-        .expect("SELECT")).expect("collect");
 
-    response.send(rustc_serialize::json::encode(&users).unwrap());
+    match fetch_all_users(ctx.conn_pool.as_ref()) {
+        Ok(users) => response.send(rustc_serialize::json::encode(&users).unwrap()),
+        Err(err) => return Err(ListsError::DatabaseError),
+    }
+    
+
+    return Ok(());
 }
 
 enum Api {
@@ -580,12 +600,12 @@ enum Api {
         filename: &'static str
     },
     DynamicHandler{
-        handler: fn(rustful::Context, rustful::Response)
+        handler: fn(rustful::Context, rustful::Response) -> ListsResult<()>
     }
 }
 
 impl rustful::Handler for Api {
-    fn handle_request(&self, context: rustful::Context, mut response: rustful::Response) {
+    fn handle_request(&self, context: rustful::Context, response: rustful::Response) {
         match *self {
             Api::StaticFile { ref filename } => {
                 let res = response.send_file(filename)
@@ -593,7 +613,10 @@ impl rustful::Handler for Api {
                     .or_else(|e| e.ignore_send_error());
             },
             Api::DynamicHandler { ref handler } => {
-                handler(context, response);
+                match handler(context, response) {
+                    Ok(_) => (),
+                    Err(err) => println!("ERROR! {:?}", err),
+                }
             }
         }
     }
@@ -606,7 +629,7 @@ fn serve_rustful(port: u16) {
             "/static/app.js" => {
                 Get: Api::StaticFile{filename: "static/app.js"},
             },
-            "users" => {
+            "/users" => {
                 Get: Api::DynamicHandler{handler: list_users},
             }
         }

@@ -4,7 +4,7 @@ var UserPicker = React.createClass({
   },
   componentDidMount: function() {
     $.ajax({
-      url: 'http://linode.mrjon.es:2346/users',
+      url: '/users',
       dataType: 'json',
       cache: false,
       success: function(data) {
@@ -20,7 +20,9 @@ var UserPicker = React.createClass({
     var userNodes = this.state.users.map(function(user) {
       return (
         <div className="user" key={user.id}>
-          {user.name}
+          <ReactRouter.Link to={`/lists/${user.id}`}>
+            {user.name}
+          </ReactRouter.Link>
         </div>
       );
     });
@@ -33,16 +35,25 @@ var UserPicker = React.createClass({
   },
 });
 
-var Widget = React.createClass({
+var ListPicker = React.createClass({
   render: function() {
     return (
-      <UserPicker />
-    );
+      <div>
+        Hello user_id #{this.props.params.userId}!
+      </div>
+    )
   }
 });
 
-ReactDOM.render(
-  <Widget />,
-  document.getElementById('content')
-);
+// ReactDOM.render(
+//  <Widget />,
+//  document.getElementById('content')
+// );
 
+// https://www.kirupa.com/react/creating_single_page_app_react_using_react_router.htm
+ReactDOM.render((
+  <ReactRouter.Router>
+    <ReactRouter.Route path="/" component={UserPicker} />
+    <ReactRouter.Route path="/lists/:userId" component={ListPicker} />
+  </ReactRouter.Router>
+  ), document.getElementById('content'));
