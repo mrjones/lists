@@ -164,8 +164,6 @@ struct LinkAnnotation<'a> {
     url: &'a str,
 }
 
-
-
 #[derive(Debug, Clone)]
 enum ListsError {
     MissingParam(String),
