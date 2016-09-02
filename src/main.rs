@@ -164,6 +164,11 @@ struct LinkAnnotation<'a> {
     url: &'a str,
 }
 
+
+//
+// {Iron,Rustful}-agnostic functionality
+//
+
 #[derive(Debug, Clone)]
 enum ListsError {
     MissingParam(String),
@@ -174,14 +179,6 @@ enum ListsError {
 
     Unknown,
 }
-
-//macro_rules! ltry {
-//    ($result:expr) => match $result {
-//        ::std::result::Result::Ok(val) => val,
-//        ::std::result::Result::Err(err) => return ::std::result::Result::Err(
-//            ListsError
-//    }
-//}
 
 type ListsResult<T> = Result<T, ListsError>;
 
@@ -217,6 +214,19 @@ impl std::fmt::Display for ListsError {
     }
 }
 
+fn fetch_all_lists(user: &User, conn: &mysql::Pool) -> Result<Vec<List>, mysql::Error> {
+    return to_vector::<List>(
+        try!(conn.prep_exec("SELECT lists.lists.id, lists.lists.name FROM lists.list_users LEFT JOIN lists.lists ON lists.list_users.list_id = lists.lists.id WHERE lists.list_users.user_id = ?", (user.id,))));
+}
+
+fn fetch_all_users(conn: &mysql::Pool) -> Result<Vec<User>, mysql::Error> {
+    return to_vector::<User>(
+        try!(conn.prep_exec("SELECT id, name FROM lists.users", ())))
+}
+
+//
+// Iron-specific information
+//
 
 impl std::convert::From<ListsError> for iron::error::IronError {
     fn from(wrapped: ListsError) -> iron::error::IronError {
@@ -242,16 +252,6 @@ impl iron::middleware::AfterMiddleware for ErrorPage {
         return Ok(iron::response::Response::with(
             (iron::status::NotFound, format!("ERROR PAGE!!\n{:?}", err).to_string())));
     }
-}
-
-fn fetch_all_lists(user: &User, conn: &mysql::Pool) -> Result<Vec<List>, mysql::Error> {
-    return to_vector::<List>(
-        try!(conn.prep_exec("SELECT lists.lists.id, lists.lists.name FROM lists.list_users LEFT JOIN lists.lists ON lists.list_users.list_id = lists.lists.id WHERE lists.list_users.user_id = ?", (user.id,))));
-}
-
-fn fetch_all_users(conn: &mysql::Pool) -> Result<Vec<User>, mysql::Error> {
-    return to_vector::<User>(
-        try!(conn.prep_exec("SELECT id, name FROM lists.users", ())))
 }
 
 struct RequestEnv {
@@ -395,10 +395,10 @@ fn to_link_annotation<'a>(annotation: &'a Annotation) -> Option<LinkAnnotation<'
     return Some(LinkAnnotation{url: &annotation.body});
 }
 
+    
 fn show_list(list_id: &str, user: &User, conn: &mysql::Pool) -> iron::IronResult<iron::response::Response> {
     let items = itry!(to_vector::<Item>(
         itry!(conn.prep_exec("SELECT id, name, description FROM lists.items WHERE list_id = ?", (list_id,)))));
-
 
     let annotations = itry!(to_vector::<Annotation>(
         itry!(conn.prep_exec("SELECT lists.item_annotations.id, lists.items.id, lists.item_annotations.kind, lists.item_annotations.body FROM lists.items JOIN lists.item_annotations ON lists.items.id = lists.item_annotations.item_id WHERE lists.items.list_id = ?", (list_id,)))));
@@ -438,7 +438,7 @@ fn show_list(list_id: &str, user: &User, conn: &mysql::Pool) -> iron::IronResult
             }
         }).collect(),
     };
-
+    
     let mut data : std::collections::BTreeMap<String, Json> =
         std::collections::BTreeMap::new();
     data.insert("page".to_string(), list_page.to_json());
@@ -448,7 +448,7 @@ fn show_list(list_id: &str, user: &User, conn: &mysql::Pool) -> iron::IronResult
         .set_mut(handlebars_iron::Template::new("one-list", data))
         .set_mut(status::Ok);
             
-    return Ok(response);
+    return Ok(response);    
 }
 
 fn read_body(req: &mut iron::request::Request) -> String {
@@ -571,6 +571,10 @@ fn remove_list_user_handler(req: &mut iron::request::Request) -> iron::IronResul
         },
     }
 }
+
+//
+// Rustful-specific functionality
+//
 
 struct ServerContext {
     conn_pool: Box<mysql::Pool>
