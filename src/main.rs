@@ -21,6 +21,11 @@ use rustc_serialize::json::Json;
 use rustc_serialize::json::ToJson;
 use std::io::Read;
 
+mod result;
+
+use result::ListsError;
+use result::ListsResult;
+
 #[derive(Copy, Clone)]
 pub struct ConnectionPool;
 impl iron::typemap::Key for ConnectionPool {
@@ -169,50 +174,6 @@ struct LinkAnnotation<'a> {
 // {Iron,Rustful}-agnostic functionality
 //
 
-#[derive(Debug, Clone)]
-enum ListsError {
-    MissingParam(String),
-    InvalidParam,
-    DatabaseError,
-    DoesNotExist,
-    InconsistentDatabase(String),
-
-    Unknown,
-}
-
-type ListsResult<T> = Result<T, ListsError>;
-
-impl ListsError {
-    fn str(&self) -> &str {
-        match *self {
-            // TODO(mrjones): print out which param is actually missing?
-            ListsError::MissingParam(_) => "MissingParam", 
-            ListsError::InvalidParam => "InvalidParam",
-            ListsError::DatabaseError => "DatabaseError",
-            ListsError::DoesNotExist => "DoesNotExist",
-            ListsError::Unknown => "Unknown",
-            ListsError::InconsistentDatabase(_) => "InconsistentDababase",
-        }
-    }
-}
-
-
-
-impl std::error::Error for ListsError {
-    fn description(&self) -> &str {
-        return self.str();
-    }
-
-    fn cause(&self) -> Option<&std::error::Error> {
-        return None;
-    }
-}
-
-impl std::fmt::Display for ListsError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        return f.write_str(self.str());
-    }
-}
 
 fn fetch_all_lists(user: &User, conn: &mysql::Pool) -> Result<Vec<List>, mysql::Error> {
     return to_vector::<List>(
