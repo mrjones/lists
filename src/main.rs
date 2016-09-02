@@ -21,32 +21,20 @@ use rustc_serialize::json::Json;
 use rustc_serialize::json::ToJson;
 use std::io::Read;
 
-mod result;
+mod data;
 mod model;
+mod result;
+mod util;
 
+use model::*;
 use result::ListsError;
 use result::ListsResult;
-use model::*;
+use util::to_vector;
 
 #[derive(Copy, Clone)]
 pub struct ConnectionPool;
 impl iron::typemap::Key for ConnectionPool {
     type Value = mysql::Pool;
-}
-
-//
-// {Iron,Rustful}-agnostic functionality
-//
-
-
-fn fetch_all_lists(user: &User, conn: &mysql::Pool) -> Result<Vec<List>, mysql::Error> {
-    return to_vector::<List>(
-        try!(conn.prep_exec("SELECT lists.lists.id, lists.lists.name FROM lists.list_users LEFT JOIN lists.lists ON lists.list_users.list_id = lists.lists.id WHERE lists.list_users.user_id = ?", (user.id,))));
-}
-
-fn fetch_all_users(conn: &mysql::Pool) -> Result<Vec<User>, mysql::Error> {
-    return to_vector::<User>(
-        try!(conn.prep_exec("SELECT id, name FROM lists.users", ())))
 }
 
 //
@@ -142,15 +130,9 @@ fn pick_user_handler(req: &mut iron::request::Request) -> iron::IronResult<iron:
     return pick_user_immutable_handler(req);
 }
 
-fn to_vector<T: DbObject>(query_result: mysql::QueryResult) -> mysql::error::Result<Vec<T>> {
-    return query_result.map(|row_result| {
-        return Ok(T::from_row(try!(row_result)));
-    }).collect();
-}
-
 fn pick_user_immutable_handler(req: &iron::request::Request) -> iron::IronResult<iron::response::Response> {
     let conn = &req.extensions.get::<persistent::Read<ConnectionPool>>().unwrap();
-    let users = itry!(fetch_all_users(conn));
+    let users = itry!(data::fetch_all_users(conn));
 
     let mut data : std::collections::BTreeMap<String, Json> =
         std::collections::BTreeMap::new();
@@ -169,7 +151,7 @@ fn show_all_lists(user: &User, conn: &mysql::Pool) -> iron::IronResult<iron::res
     let mut data : std::collections::BTreeMap<String, Json> =
         std::collections::BTreeMap::new();
     data.insert("lists".to_string(),
-                itry!(fetch_all_lists(user, conn)).to_json());
+                itry!(data::fetch_all_lists(user, conn)).to_json());
     data.insert("user_id".to_string(), user.id.to_json());
     
     let mut response = iron::response::Response::new();
@@ -406,14 +388,14 @@ struct ServerContext {
 }
 
 fn list_users(server_context: &ServerContext, _: rustful::Context) -> ListsResult<Box<ToJson>> {
-    match fetch_all_users(server_context.conn_pool.as_ref()) {
+    match data::fetch_all_users(server_context.conn_pool.as_ref()) {
         Ok(users) => return Ok(Box::new(users)),
         Err(_) => return Err(ListsError::DatabaseError),
     }
 }
 
 fn all_lists(server_context: &ServerContext, user: &User, _: rustful::Context) -> ListsResult<Box<ToJson>> {
-    match fetch_all_lists(user, server_context.conn_pool.as_ref()) {
+    match data::fetch_all_lists(user, server_context.conn_pool.as_ref()) {
         Ok(lists) => return Ok(Box::new(lists)),
         Err(_) => return Err(ListsError::DatabaseError),
     }
