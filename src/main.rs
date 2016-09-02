@@ -32,9 +32,9 @@ use result::ListsResult;
 use util::to_vector;
 
 #[derive(Copy, Clone)]
-pub struct ConnectionPool;
-impl iron::typemap::Key for ConnectionPool {
-    type Value = mysql::Pool;
+pub struct DbHandle;
+impl iron::typemap::Key for DbHandle {
+    type Value = data::Db;
 }
 
 //
@@ -51,8 +51,6 @@ fn into_iron_error<E: iron::error::Error>(err: E) -> iron::error::IronError {
     let desc = err.description().to_owned();
     return iron::error::IronError::new(err, desc);
 }
-
-
 
 struct ErrorPage;
 
@@ -77,14 +75,6 @@ struct RequestEnvBuilder {
 }
 impl iron::typemap::Key for RequestEnvBuilder { type Value = RequestEnv; }
 
-fn lookup_user(id: i64, db_conn: &mysql::Pool) -> iron::IronResult<User> {
-    let mut result = itry!(db_conn.prep_exec("SELECT id, name FROM lists.users WHERE id = ?", (id,)));
-    let row = itry!(result.next().ok_or(ListsError::DoesNotExist));
-    let user = User::from_row(itry!(row));
-    assert!(result.next().is_none(), "Duplicate user id!");
-    return Ok(user);
-}
-
 fn parse_to_map(parse: &mut url::form_urlencoded::Parse) -> std::collections::BTreeMap<String, String> {
     let mut result = std::collections::BTreeMap::new();
     for (k,v) in parse {
@@ -100,20 +90,20 @@ fn params_map(req: &iron::request::Request) -> std::collections::BTreeMap<String
     return parse_to_map(&mut url.query_pairs());
 }
 
-fn get_user(params: &std::collections::BTreeMap<String, String>, db_conn: &mysql::Pool) -> iron::IronResult<User> {
+fn get_user(params: &std::collections::BTreeMap<String, String>, db: &data::Db) -> iron::IronResult<User> {
     let id_str = itry!(params.get("user_id").ok_or(
         ListsError::MissingParam("user_id".to_string())));
     let id_int = itry!(id_str.parse::<i64>());
-    return lookup_user(id_int, db_conn);
+    return db.lookup_user(id_int).map_err(into_iron_error);
 }
 
 impl iron::BeforeMiddleware for RequestEnvBuilder {
     fn before(&self, req: &mut iron::request::Request) -> iron::IronResult<()> {
         let user;
         {
-            let conn = &req.extensions.get::<persistent::Read<ConnectionPool>>().unwrap();
+            let db = &req.extensions.get::<persistent::Read<DbHandle>>().unwrap();
             let params = params_map(req);
-            user = get_user(&params, conn);
+            user = get_user(&params, db);
         }
 
         req.extensions.insert::<RequestEnvBuilder>(RequestEnv{
@@ -131,8 +121,8 @@ fn pick_user_handler(req: &mut iron::request::Request) -> iron::IronResult<iron:
 }
 
 fn pick_user_immutable_handler(req: &iron::request::Request) -> iron::IronResult<iron::response::Response> {
-    let conn = &req.extensions.get::<persistent::Read<ConnectionPool>>().unwrap();
-    let users = itry!(data::fetch_all_users(conn));
+    let db = req.extensions.get::<persistent::Read<DbHandle>>().unwrap();
+    let users = itry!(db.fetch_all_users());
 
     let mut data : std::collections::BTreeMap<String, Json> =
         std::collections::BTreeMap::new();
@@ -146,12 +136,12 @@ fn pick_user_immutable_handler(req: &iron::request::Request) -> iron::IronResult
 }
 
 
-fn show_all_lists(user: &User, conn: &mysql::Pool) -> iron::IronResult<iron::response::Response> {
+fn show_all_lists(user: &User, db: &data::Db) -> iron::IronResult<iron::response::Response> {
 
     let mut data : std::collections::BTreeMap<String, Json> =
         std::collections::BTreeMap::new();
     data.insert("lists".to_string(),
-                itry!(data::fetch_all_lists(user, conn)).to_json());
+                itry!(db.fetch_all_lists(user)).to_json());
     data.insert("user_id".to_string(), user.id.to_json());
     
     let mut response = iron::response::Response::new();
@@ -167,14 +157,15 @@ fn show_all_lists_handler(req: &mut iron::request::Request) -> iron::IronResult<
     match env.user {
         Err(_) => return pick_user_immutable_handler(req),
         Ok(ref user) => {
-            let conn = &req.extensions.get::<persistent::Read<ConnectionPool>>().unwrap();
-            return show_all_lists(user, conn);
+            let db = &req.extensions.get::<persistent::Read<DbHandle>>().unwrap();
+            return show_all_lists(user, db);
         },
     }
 }
 
 fn show_one_list_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::response::Response> {
-    let conn = &req.get::<persistent::Read<ConnectionPool>>().unwrap();
+    let db = &req.get::<persistent::Read<DbHandle>>().unwrap();
+    let conn = db.conn.as_ref();
     let params = params_map(req);
     let env = &req.extensions().get::<RequestEnvBuilder>().unwrap();
 
@@ -266,9 +257,9 @@ fn read_body(req: &mut iron::request::Request) -> String {
 
 fn add_list_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::response::Response> {
     let body = read_body(req);
-    let pool = &req.get::<persistent::Read<ConnectionPool>>().unwrap();
+    let db = &req.get::<persistent::Read<DbHandle>>().unwrap();
     let env = &req.extensions().get::<RequestEnvBuilder>().unwrap();
-    let mut conn = pool.get_conn().unwrap();
+    let mut conn = db.conn.get_conn().unwrap();
 
     match env.user {
         Err(_) => return pick_user_immutable_handler(req),
@@ -281,14 +272,15 @@ fn add_list_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::
 
             itry!(conn.prep_exec("INSERT INTO lists.lists (name) VALUES (?)", (name,)));
             itry!(conn.prep_exec("INSERT INTO lists.list_users (list_id, user_id) VALUES (LAST_INSERT_ID(), ?)", (user.id,)));
-            return show_all_lists(user, pool);
+            return show_all_lists(user, db);
         }
     }    
 }
 
 fn add_list_item_json_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::response::Response> {
     let body = read_body(req);
-    let conn = &req.get::<persistent::Read<ConnectionPool>>().unwrap();
+    let db = &req.get::<persistent::Read<DbHandle>>().unwrap();
+    let conn = db.conn.as_ref();
     let env = &req.extensions().get::<RequestEnvBuilder>().unwrap();
 
     match env.user {
@@ -304,7 +296,8 @@ fn add_list_item_json_handler(req: &mut iron::request::Request) -> iron::IronRes
 
 fn add_list_item_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::response::Response> {
     let body = read_body(req);
-    let conn = &req.get::<persistent::Read<ConnectionPool>>().unwrap();
+    let db = &req.get::<persistent::Read<DbHandle>>().unwrap();
+    let conn = db.conn.as_ref();
     let env = &req.extensions().get::<RequestEnvBuilder>().unwrap();
 
     match env.user {
@@ -337,7 +330,8 @@ fn add_list_item_handler(req: &mut iron::request::Request) -> iron::IronResult<i
 
 fn add_list_user_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::response::Response> {
     let body = read_body(req);
-    let conn = &req.get::<persistent::Read<ConnectionPool>>().unwrap();
+    let db = &req.get::<persistent::Read<DbHandle>>().unwrap();
+    let conn = db.conn.as_ref();
     let env = &req.extensions().get::<RequestEnvBuilder>().unwrap();
 
     match env.user {
@@ -359,7 +353,8 @@ fn add_list_user_handler(req: &mut iron::request::Request) -> iron::IronResult<i
 
 fn remove_list_user_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::response::Response> {
     let body = read_body(req);
-    let conn = &req.get::<persistent::Read<ConnectionPool>>().unwrap();
+    let db = &req.get::<persistent::Read<DbHandle>>().unwrap();
+    let conn = db.conn.as_ref();
     let env = &req.extensions().get::<RequestEnvBuilder>().unwrap();
 
     match env.user {
@@ -384,18 +379,27 @@ fn remove_list_user_handler(req: &mut iron::request::Request) -> iron::IronResul
 //
 
 struct ServerContext {
-    conn_pool: Box<mysql::Pool>
+//    conn_pool: Box<mysql::Pool>,
+    db: data::Db,
+}
+
+impl ServerContext {
+    fn new(conn_pool: mysql::Pool) -> ServerContext {
+        return ServerContext {
+            db: data::Db{conn: Box::new(conn_pool)},
+        }
+    }
 }
 
 fn list_users(server_context: &ServerContext, _: rustful::Context) -> ListsResult<Box<ToJson>> {
-    match data::fetch_all_users(server_context.conn_pool.as_ref()) {
+    match server_context.db.fetch_all_users() {
         Ok(users) => return Ok(Box::new(users)),
         Err(_) => return Err(ListsError::DatabaseError),
     }
 }
 
 fn all_lists(server_context: &ServerContext, user: &User, _: rustful::Context) -> ListsResult<Box<ToJson>> {
-    match data::fetch_all_lists(user, server_context.conn_pool.as_ref()) {
+    match server_context.db.fetch_all_lists(user) {
         Ok(lists) => return Ok(Box::new(lists)),
         Err(_) => return Err(ListsError::DatabaseError),
     }
@@ -440,7 +444,7 @@ impl rustful::Handler for Api {
                     .to_string()
                     .parse::<i64>()
                     .expect("couldn't parse user_id");
-                let user = lookup_user(user_id, server_context.conn_pool.as_ref())
+                let user = server_context.db.lookup_user(user_id)
                     .expect("couldn't look up user");
 
                 match handler(server_context, &user, context) {
@@ -469,9 +473,8 @@ fn serve_rustful(port: u16) {
         }
     };
 
-    let server_context = ServerContext{
-        conn_pool: Box::new(mysql::Pool::new("mysql://lists:lists@localhost").unwrap()),
-    };
+    let server_context = ServerContext::new(
+        mysql::Pool::new("mysql://lists:lists@localhost").unwrap());
     
     match (rustful::Server{
         handlers: my_router,
@@ -513,10 +516,12 @@ fn main() {
         
     let mut chain = iron::Chain::new(mount);
 
-    let pool_reader : persistent::Read<ConnectionPool> = 
-        persistent::Read::<ConnectionPool>::one(
-            mysql::Pool::new("mysql://lists:lists@localhost").unwrap());
-    chain.link_before(pool_reader);
+    let handle_reader : persistent::Read<DbHandle> = 
+        persistent::Read::<DbHandle>::one(
+            data::Db{
+                conn: Box::new(mysql::Pool::new("mysql://lists:lists@localhost").unwrap()),
+            });
+    chain.link_before(handle_reader);
     chain.link_before(RequestEnvBuilder{
 //        db_pool: mysql::Pool::new("mysql://lists:lists@localhost").unwrap(),
     });
