@@ -79,4 +79,9 @@ impl Db {
             items: full_items,
         });
     }
+
+    pub fn add_item(&self, list_id: i64, name: &str, description: &str) -> DbResult<()> {
+        let _ = try!(self.conn.prep_exec("INSERT INTO lists.items (list_id, name, description) VALUES (?, ?, ?)", (list_id, name, description)));
+        return Ok(());
+    }
 }

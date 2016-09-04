@@ -425,6 +425,33 @@ fn one_list(server_context: &ServerContext, user: &User, context: rustful::Conte
     }
 }
 
+fn add_item(server_context: &ServerContext, user: &User, mut context: rustful::Context) -> ListsResult<Box<ToJson>> {
+//    let item : Item = context.body.decode_json_body().expect("decoding item");
+//    println!("they posted: {:?}", item);
+
+    #[derive(Debug, RustcDecodable)]
+    struct NewItem {
+        name: String,
+        description: String,
+    }
+    let item : NewItem = context.body.decode_json_body().expect("decoding item");
+    println!("they posted: {:?}", item);
+
+    // TODO: lift out a level?
+    let list_id = context.variables.get("list_id")
+        .expect("no list_id param")
+        .to_string().parse::<i64>()
+        .expect("couldn't parse list_id");
+
+    match server_context.db.add_item(list_id, &item.name, &item.description) {
+        Ok(list) => return Ok(Box::new("TODO".to_string())),
+        Err(e) => {
+            println!("DB Error: {:?}", e);
+            return Err(ListsError::DatabaseError);
+        },
+    }
+}
+
 enum Api {
     StaticFile{
         filename: &'static str
@@ -490,6 +517,9 @@ fn serve_rustful(port: u16) {
             "/lists/:user_id" => {
                 Get: Api::LoggedInHandler{handler: all_lists},
                 "/list/:list_id" => {
+                    "/items" => {
+                        Post: Api::LoggedInHandler{handler: add_item},
+                    },
                     Get: Api::LoggedInHandler{handler: one_list},
                 },
             }

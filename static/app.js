@@ -66,6 +66,58 @@ var ListItem = React.createClass({
   }
 });
 
+var AddItemWidget = React.createClass({
+  getIntialState: function() {
+    return {name: '', description: ''};
+  },
+  handleNameChange: function(e) {
+    this.setState({name: e.target.value});
+  },
+  handleDescriptionChange: function(e) {
+    this.setState({description: e.target.value});
+  },
+  handleSubmit: function(e) {
+    e.preventDefault();
+    var item = {
+      name: this.state.name.trim(),
+      description: this.state.description.trim(),
+    };
+    if (!item.name || !item.description) {
+      return;
+    }
+
+    $.ajax({
+      url: `/lists/${this.props.userId}/list/${this.props.listId}/items`,
+      dataType: 'json',
+      type: 'POST',
+      data: JSON.stringify(item),
+      success: function(data) {
+        console.log("posted some data");
+      }.bind(this),
+      error: function(xhr, status, err) {
+        this.setState({data: comments});
+        console.error(this.props.url, status, err.toString());
+      }.bind(this)
+    });
+
+    this.setState({name: '', descrption: ''});
+  },
+  render: function() {
+    return (
+      <div>
+        Add Item:
+        <form onSubmit={this.handleSubmit}>
+          <input name="name" placeholder="Name" type="text" onChange={this.handleNameChange} />
+          <br/>
+          <textarea name="description" placeholder="Description" onChange={this.handleDescriptionChange} />
+          <br/>
+          <input type="submit" />
+        </form>
+      </div>
+    );
+  }
+});
+
 var List = React.createClass({
   getInitialState: function() {
     return {name: "", items: []}
@@ -92,10 +144,15 @@ var List = React.createClass({
     });
     return (
       <div>
-      ListID: {this.props.params.listId} / {this.state.name}
-      <ul>
-        {itemNodes}
-      </ul>
+        <div>
+          ListID: {this.props.params.listId} / {this.state.name}
+        </div>
+        <div>
+          <ul>
+            {itemNodes}
+          </ul>
+        </div>
+        <AddItemWidget userId={this.props.params.userId} listId={this.props.params.listId}/>
       </div>
     );
   }
