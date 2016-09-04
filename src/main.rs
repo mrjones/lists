@@ -405,6 +405,17 @@ fn all_lists(server_context: &ServerContext, user: &User, _: rustful::Context) -
     }
 }
 
+fn one_list(server_context: &ServerContext, user: &User, context: rustful::Context) -> ListsResult<Box<ToJson>> {
+    let list_id = context.variables.get("list_id")
+        .expect("no list_id param")
+        .to_string().parse::<i64>()
+        .expect("couldn't parse list_id");
+    match server_context.db.lookup_list(list_id) {
+        Ok(list) => return Ok(Box::new(list)),
+        Err(_) => return Err(ListsError::DatabaseError),
+    }
+}
+
 enum Api {
     StaticFile{
         filename: &'static str
@@ -467,9 +478,13 @@ fn serve_rustful(port: u16) {
             "/users" => {
                 Get: Api::LoggedOutHandler{handler: list_users},
             },
-            "/lists" => {
-                ":user_id" => Get: Api::LoggedInHandler{handler: all_lists},
+            "/lists/:user_id" => {
+                Get: Api::LoggedInHandler{handler: all_lists},
+                "/list/:list_id" => {
+                    Get: Api::LoggedInHandler{handler: one_list},
+                },
             }
+            
         }
     };
 
