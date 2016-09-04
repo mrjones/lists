@@ -48,10 +48,55 @@ var App = React.createClass({
   }
 });
 
-var List = React.createClass({
+var ListItem = React.createClass({
   render: function() {
+    var linkNodes = this.props.data.link_annotations.map(function(link) {
+      return (
+        <a href={link.url} key={link.url}>{link.url}</a>
+      )
+    });
+
     return (
-      <div>ListID: {this.props.params.listId}</div>
+      <li className="listItem">
+        <div className="name">{this.props.data.name}</div>
+        <div className="description">{this.props.data.description}</div>
+        {linkNodes}
+      </li>
+    );
+  }
+});
+
+var List = React.createClass({
+  getInitialState: function() {
+    return {name: "", items: []}
+  },
+  componentDidMount: function() {
+    $.ajax({
+      url: `/lists/${this.props.params.userId}/list/${this.props.params.listId}`,
+      dataType: 'json',
+      cache: false,
+      success: function(data) {
+        console.log(data);
+        this.setState({name: data.name, items: data.items});
+      }.bind(this),
+      error: function(xhr, status, err) {
+        console.error("url", status, err.toString());        
+      }.bind(this)
+    });
+  },
+  render: function() {
+    var itemNodes = this.state.items.map(function(item) {
+      return (
+        <ListItem data={item} key={item.id}/>
+      );
+    });
+    return (
+      <div>
+      ListID: {this.props.params.listId} / {this.state.name}
+      <ul>
+        {itemNodes}
+      </ul>
+      </div>
     );
   }
 });
