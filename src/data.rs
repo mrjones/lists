@@ -40,6 +40,11 @@ impl Db {
     }
 
     pub fn lookup_list(&self, list_id: i64) -> DbResult<FullList> {
+        let mut list_result = try!(self.conn.prep_exec("SELECT id, name FROM lists.lists WHERE id = ?", (list_id,)));
+        let row = list_result.next().expect("reading row");
+        let list = List::from_row(try!(row));
+        assert!(list_result.next().is_none(), "Duplicate list");
+        
         let db_items = try!(to_vector::<DbItem>(
             try!(self.conn.prep_exec("SELECT id, name, description FROM lists.items WHERE list_id = ?", (list_id,)))));
 
@@ -70,7 +75,7 @@ impl Db {
         }
 
         return Ok(FullList {
-            name: "TODO".to_string(),
+            name: list.name,
             items: full_items,
         });
     }

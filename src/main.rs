@@ -394,14 +394,20 @@ impl ServerContext {
 fn list_users(server_context: &ServerContext, _: rustful::Context) -> ListsResult<Box<ToJson>> {
     match server_context.db.fetch_all_users() {
         Ok(users) => return Ok(Box::new(users)),
-        Err(_) => return Err(ListsError::DatabaseError),
+        Err(e) => {
+            println!("DB Error: {:?}", e);
+            return Err(ListsError::DatabaseError);
+        },
     }
 }
 
 fn all_lists(server_context: &ServerContext, user: &User, _: rustful::Context) -> ListsResult<Box<ToJson>> {
     match server_context.db.fetch_all_lists(user) {
         Ok(lists) => return Ok(Box::new(lists)),
-        Err(_) => return Err(ListsError::DatabaseError),
+        Err(e) => {
+            println!("DB Error: {:?}", e);
+            return Err(ListsError::DatabaseError);
+        },
     }
 }
 
@@ -412,7 +418,10 @@ fn one_list(server_context: &ServerContext, user: &User, context: rustful::Conte
         .expect("couldn't parse list_id");
     match server_context.db.lookup_list(list_id) {
         Ok(list) => return Ok(Box::new(list)),
-        Err(_) => return Err(ListsError::DatabaseError),
+        Err(e) => {
+            println!("DB Error: {:?}", e);
+            return Err(ListsError::DatabaseError);
+        },
     }
 }
 
