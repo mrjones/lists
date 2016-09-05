@@ -87,6 +87,15 @@ impl Db {
         let _ = try!(self.conn.prep_exec("DELETE FROM lists.items WHERE id = ?", (item_id,)));
         return Ok(());
     }
+
+    pub fn add_annotation(&self, item_id: i64, kind: &str, body: &str) -> DbResult<Annotation> {
+        let mut conn = self.conn.get_conn().unwrap();
+        // TODO: create a "kind" enum
+        let _ = try!(conn.prep_exec("INSERT INTO lists.item_annotations (item_id, kind, body) VALUES (?, ?, ?)", (item_id, kind, body)));
+
+        let mut result = try!(conn.prep_exec("SELECT id, item_id, kind, body FROM lists.item_annotations WHERE id = LAST_INSERT_ID()", ()));
+        return Db::extract_one::<Annotation>(&mut result);
+    }
     
     fn extract_one<T: DbObject>(result: &mut mysql::QueryResult) -> DbResult<T> {
         let row = try!(result.next().ok_or(mysql::Error::IoError(

@@ -444,16 +444,13 @@ fn delete_item(server_context: &ServerContext, user: &User, mut context: rustful
 }
 
 fn add_item(server_context: &ServerContext, user: &User, mut context: rustful::Context) -> ListsResult<Box<ToJson>> {
-//    let item : Item = context.body.decode_json_body().expect("decoding item");
-//    println!("they posted: {:?}", item);
-
     #[derive(Debug, RustcDecodable)]
     struct NewItem {
         name: String,
         description: String,
     }
     let item : NewItem = context.body.decode_json_body().expect("decoding item");
-    println!("they posted: {:?}", item);
+    println!("add_item :: they posted: {:?}", item);
 
     // TODO: lift out a level?
     let list_id = context.variables.get("list_id")
@@ -468,6 +465,33 @@ fn add_item(server_context: &ServerContext, user: &User, mut context: rustful::C
             description: db_item.description,
             link_annotations: vec![],
         })),
+        Err(e) => {
+            println!("DB Error: {:?}", e);
+            return Err(ListsError::DatabaseError);
+        },
+    }
+}
+
+fn add_annotation(server_context: &ServerContext, user: &User, mut context: rustful::Context) -> ListsResult<Box<ToJson>> {
+
+    #[derive(Debug, RustcDecodable)]
+    struct NewAnnotation {
+        kind: String,
+        body: String,
+
+    }
+    let annotation : NewAnnotation = context.body.decode_json_body().expect("decoding annotation");
+    println!("add_annotation :: they posted: {:?}", annotation);
+
+    // TODO: lift out a level?
+    let item_id = context.variables.get("item_id")
+        .expect("no item_id param")
+        .to_string().parse::<i64>()
+        .expect("couldn't parse item_id");
+
+    // TODO: check item belongs to list and user has permission
+    match server_context.db.add_annotation(item_id, &annotation.kind, &annotation.body) {
+        Ok(db_annotation) => return Ok(Box::new(db_annotation)),
         Err(e) => {
             println!("DB Error: {:?}", e);
             return Err(ListsError::DatabaseError);
@@ -543,6 +567,9 @@ fn serve_rustful(port: u16) {
                     "/items" => {
                         "/:item_id" => {
                             Delete: Api::LoggedInHandler{handler: delete_item},
+                            "/annotations" => {
+                                Post: Api::LoggedInHandler{handler: add_annotation},
+                            },
                         },
                         Post: Api::LoggedInHandler{handler: add_item},
                     },
