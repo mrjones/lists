@@ -83,6 +83,11 @@ impl Db {
         return Db::extract_one::<DbItem>(&mut result);
     }
 
+    pub fn delete_item(&self, item_id: i64) -> DbResult<()> {
+        let _ = try!(self.conn.prep_exec("DELETE FROM lists.items WHERE id = ?", (item_id,)));
+        return Ok(());
+    }
+    
     fn extract_one<T: DbObject>(result: &mut mysql::QueryResult) -> DbResult<T> {
         let row = try!(result.next().ok_or(mysql::Error::IoError(
             std::io::Error::new(std::io::ErrorKind::NotFound, "Couldn't extract one item."))));

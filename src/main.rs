@@ -425,6 +425,24 @@ fn one_list(server_context: &ServerContext, user: &User, context: rustful::Conte
     }
 }
 
+fn delete_item(server_context: &ServerContext, user: &User, mut context: rustful::Context) -> ListsResult<Box<ToJson>> {
+    // TODO: check item belongs to list
+    // TODO: check user can edit list
+    
+    let item_id = context.variables.get("item_id")
+        .expect("no item_id param")
+        .to_string().parse::<i64>()
+        .expect("couldn't parse item_id");
+
+    match server_context.db.delete_item(item_id) {
+        Ok(list) => return Ok(Box::new("".to_string())),
+        Err(e) => {
+            println!("DB Error: {:?}", e);
+            return Err(ListsError::DatabaseError);
+        },
+    }
+}
+
 fn add_item(server_context: &ServerContext, user: &User, mut context: rustful::Context) -> ListsResult<Box<ToJson>> {
 //    let item : Item = context.body.decode_json_body().expect("decoding item");
 //    println!("they posted: {:?}", item);
@@ -523,6 +541,9 @@ fn serve_rustful(port: u16) {
                 Get: Api::LoggedInHandler{handler: all_lists},
                 "/list/:list_id" => {
                     "/items" => {
+                        "/:item_id" => {
+                            Delete: Api::LoggedInHandler{handler: delete_item},
+                        },
                         Post: Api::LoggedInHandler{handler: add_item},
                     },
                     Get: Api::LoggedInHandler{handler: one_list},

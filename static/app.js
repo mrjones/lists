@@ -49,6 +49,9 @@ var App = React.createClass({
 });
 
 var ListItem = React.createClass({
+  delete: function() {
+    this.props.deleteFn(this.props.data.id);
+  },
   render: function() {
     var linkNodes = this.props.data.link_annotations.map(function(link) {
       return (
@@ -58,7 +61,10 @@ var ListItem = React.createClass({
 
     return (
       <li className="listItem">
-        <div className="name">{this.props.data.name}</div>
+        <div>
+          <span className="name">{this.props.data.name}</span>
+          <button onClick={this.delete}>X</button>
+        </div>
         <div className="description">{this.props.data.description}</div>
         {linkNodes}
       </li>
@@ -130,6 +136,26 @@ var List = React.createClass({
     console.log("List::itemAdded: " + JSON.stringify(item));
     this.setState({items: this.state.items.concat([item])});
   },
+  deleteItem: function(id) {
+    $.ajax({
+      url: `/lists/${this.props.params.userId}/list/${this.props.params.listId}/items/${id}`,
+      type: 'DELETE',
+      dataType: 'json',
+      cache: false,
+      success: function(data) {
+        this.itemDeleted(id);
+      }.bind(this),
+      error: function(xhr, status, err) {
+        console.error("url", status, err.toString());        
+      }.bind(this)
+    });
+  },
+  itemDeleted: function(id) {
+    console.log("Removing item with id: " + id);
+    this.setState({items: this.state.items.filter(function(item) {
+      return item.id != id;
+    })});
+  },
   componentDidMount: function() {
     $.ajax({
       url: `/lists/${this.props.params.userId}/list/${this.props.params.listId}`,
@@ -146,9 +172,9 @@ var List = React.createClass({
   render: function() {
     var itemNodes = this.state.items.map(function(item) {
       return (
-        <ListItem data={item} key={item.id}/>
+        <ListItem data={item} key={item.id} deleteFn={this.deleteItem} />
       );
-    });
+    }.bind(this));
     return (
       <div>
         <div>
