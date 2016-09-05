@@ -33,17 +33,12 @@ impl Db {
 
     pub fn lookup_user(&self, id: i64) -> DbResult<User> {
         let mut result = try!(self.conn.prep_exec("SELECT id, name FROM lists.users WHERE id = ?", (id,)));
-        let row = result.next().expect("reading row");
-        let user = User::from_row(try!(row));
-        assert!(result.next().is_none(), "Duplicate user id!");
-        return Ok(user);
+        return Db::extract_one(&mut result);
     }
 
     pub fn lookup_list(&self, list_id: i64) -> DbResult<FullList> {
         let mut list_result = try!(self.conn.prep_exec("SELECT id, name FROM lists.lists WHERE id = ?", (list_id,)));
-        let row = list_result.next().expect("reading row");
-        let list = List::from_row(try!(row));
-        assert!(list_result.next().is_none(), "Duplicate list");
+        let list = try!(Db::extract_one::<List>(&mut list_result));
         
         let db_items = try!(to_vector::<DbItem>(
             try!(self.conn.prep_exec("SELECT id, name, description FROM lists.items WHERE list_id = ?", (list_id,)))));
@@ -80,8 +75,19 @@ impl Db {
         });
     }
 
-    pub fn add_item(&self, list_id: i64, name: &str, description: &str) -> DbResult<()> {
-        let _ = try!(self.conn.prep_exec("INSERT INTO lists.items (list_id, name, description) VALUES (?, ?, ?)", (list_id, name, description)));
-        return Ok(());
+    pub fn add_item(&self, list_id: i64, name: &str, description: &str) -> DbResult<Item> {
+        let mut conn = self.conn.get_conn().unwrap();
+        let _ = try!(conn.prep_exec("INSERT INTO lists.items (list_id, name, description) VALUES (?, ?, ?)", (list_id, name, description)));
+
+        let mut result = try!(conn.prep_exec("SELECT id, name, description FROM lists.items WHERE id = LAST_INSERT_ID()", ()));
+        return Db::extract_one::<DbItem>(&mut result);
+    }
+
+    fn extract_one<T: DbObject>(result: &mut mysql::QueryResult) -> DbResult<T> {
+        let row = try!(result.next().ok_or(mysql::Error::IoError(
+            std::io::Error::new(std::io::ErrorKind::NotFound, "Couldn't extract one item."))));
+        let obj = T::from_row(try!(row));
+        assert!(result.next().is_none(), "Duplicate entry");
+        return Ok(obj);
     }
 }

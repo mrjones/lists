@@ -444,7 +444,12 @@ fn add_item(server_context: &ServerContext, user: &User, mut context: rustful::C
         .expect("couldn't parse list_id");
 
     match server_context.db.add_item(list_id, &item.name, &item.description) {
-        Ok(list) => return Ok(Box::new("TODO".to_string())),
+        Ok(db_item) => return Ok(Box::new(FullItem{
+            id: db_item.id,
+            name: db_item.name,
+            description: db_item.description,
+            link_annotations: vec![],
+        })),
         Err(e) => {
             println!("DB Error: {:?}", e);
             return Err(ListsError::DatabaseError);

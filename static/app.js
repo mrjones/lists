@@ -67,13 +67,15 @@ var ListItem = React.createClass({
 });
 
 var AddItemWidget = React.createClass({
-  getIntialState: function() {
+  getInitialState: function() {
     return {name: '', description: ''};
   },
   handleNameChange: function(e) {
+    console.log("name changed to: " + e.target.value);
     this.setState({name: e.target.value});
   },
   handleDescriptionChange: function(e) {
+    console.log("desc changed to: " + e.target.value);
     this.setState({description: e.target.value});
   },
   handleSubmit: function(e) {
@@ -92,24 +94,26 @@ var AddItemWidget = React.createClass({
       type: 'POST',
       data: JSON.stringify(item),
       success: function(data) {
-        console.log("posted some data");
+        console.log("posted new item. got respnse: " + JSON.stringify(data));
+        this.props.itemAddedFn(data);
       }.bind(this),
       error: function(xhr, status, err) {
-        this.setState({data: comments});
         console.error(this.props.url, status, err.toString());
       }.bind(this)
     });
 
-    this.setState({name: '', descrption: ''});
+    this.replaceState(this.getInitialState(), function() {
+      this.forceUpdate();
+    }.bind(this));
   },
   render: function() {
     return (
       <div>
         Add Item:
         <form onSubmit={this.handleSubmit}>
-          <input name="name" placeholder="Name" type="text" onChange={this.handleNameChange} />
+          <input name="name" placeholder="Name" type="text" value={this.state.name} onChange={this.handleNameChange} />
           <br/>
-          <textarea name="description" placeholder="Description" onChange={this.handleDescriptionChange} />
+          <textarea name="description" placeholder="Description" value={this.state.description} onChange={this.handleDescriptionChange} />
           <br/>
           <input type="submit" />
         </form>
@@ -122,13 +126,16 @@ var List = React.createClass({
   getInitialState: function() {
     return {name: "", items: []}
   },
+  itemAdded: function(item) {
+    console.log("List::itemAdded: " + JSON.stringify(item));
+    this.setState({items: this.state.items.concat([item])});
+  },
   componentDidMount: function() {
     $.ajax({
       url: `/lists/${this.props.params.userId}/list/${this.props.params.listId}`,
       dataType: 'json',
       cache: false,
       success: function(data) {
-        console.log(data);
         this.setState({name: data.name, items: data.items});
       }.bind(this),
       error: function(xhr, status, err) {
@@ -152,7 +159,7 @@ var List = React.createClass({
             {itemNodes}
           </ul>
         </div>
-        <AddItemWidget userId={this.props.params.userId} listId={this.props.params.listId}/>
+        <AddItemWidget userId={this.props.params.userId} listId={this.props.params.listId} itemAddedFn={this.itemAdded} />
       </div>
     );
   }
