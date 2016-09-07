@@ -18,22 +18,22 @@ impl std::fmt::Display for ListsError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
         match *self {
             ListsError::MissingParam(ref param_name) => {
-                write!(f, "Missing parameter: {}", param_name);
+                try!(write!(f, "Missing parameter: {}", param_name));
             },
             ListsError::InvalidParam => {
-                write!(f, "InvalidParam");  // TODO: param_name?
+                try!(write!(f, "InvalidParam"));  // TODO: param_name?
             },
             ListsError::DatabaseError(ref err) => {
-                write!(f, "Database Error: {}", err);
+                try!(write!(f, "Database Error: {}", err));
             }
             ListsError::DoesNotExist => {
-                write!(f, "Does Not Exist");
+                try!(write!(f, "Does Not Exist"));
             },
             ListsError::Unknown => {
-                write!(f, "Unknown Error");
+                try!(write!(f, "Unknown Error"));
             },
             ListsError::InconsistentDatabase(ref more) => {
-                write!(f, "Inconsistent Dababase: {}", more);
+                try!(write!(f, "Inconsistent Dababase: {}", more));
             }
         }
 

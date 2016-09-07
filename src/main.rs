@@ -279,13 +279,11 @@ fn add_list_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::
 
 fn add_list_item_json_handler(req: &mut iron::request::Request) -> iron::IronResult<iron::response::Response> {
     let body = read_body(req);
-    let db = &req.get::<persistent::Read<DbHandle>>().unwrap();
-    let conn = db.conn.as_ref();
     let env = &req.extensions().get::<RequestEnvBuilder>().unwrap();
 
     match env.user {
         Err(_) => return pick_user_immutable_handler(req),
-        Ok(ref user) => {
+        Ok(_) => {
             let item : AnnotatedItem = rustc_serialize::json::decode(&body)
                 .expect("Couldn't parse JSON");
             println!("Parsed {:?}.", item);
@@ -423,7 +421,7 @@ fn delete_item(server_context: &ServerContext, _: &User, context: rustful::Conte
     return Ok(Box::new(try!(server_context.db.delete_item(item_id))));
 }
 
-fn add_item(server_context: &ServerContext, user: &User, mut context: rustful::Context) -> ListsResult<Box<ToJson>> {
+fn add_item(server_context: &ServerContext, _: &User, mut context: rustful::Context) -> ListsResult<Box<ToJson>> {
     #[derive(Debug, RustcDecodable)]
     struct NewItem {
         name: String,
@@ -444,7 +442,7 @@ fn add_item(server_context: &ServerContext, user: &User, mut context: rustful::C
     }));
 }
 
-fn add_annotation(server_context: &ServerContext, user: &User, mut context: rustful::Context) -> ListsResult<Box<ToJson>> {
+fn add_annotation(server_context: &ServerContext, _: &User, mut context: rustful::Context) -> ListsResult<Box<ToJson>> {
 
     #[derive(Debug, RustcDecodable)]
     struct NewAnnotation {
@@ -478,7 +476,7 @@ impl rustful::Handler for Api {
     fn handle_request(&self, context: rustful::Context, response: rustful::Response) {
         match *self {
             Api::StaticFile { ref filename } => {
-                let res = response.send_file(filename)
+                let _ = response.send_file(filename)
                     .or_else(|e| e.send_not_found("the file was not found"))
                     .or_else(|e| e.ignore_send_error());
             },
