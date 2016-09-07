@@ -11,6 +11,9 @@ use model::List;
 use model::User;
 use util::to_vector;
 
+use result::ListsError;
+use result::ListsResult;
+
 pub struct Db {
     pub conn: Box<mysql::Pool>
 }
@@ -20,31 +23,54 @@ pub type DbResult<T> = Result<T, mysql::Error>;
 type DbItem = Item;
 type DbAnnotation = Annotation;
 
+macro_rules! dbtry {
+    ($result:expr) => (match $result {
+        ::std::result::Result::Ok(val) => val,
+        ::std::result::Result::Err(err) => return ::std::result::Result::Err(
+            ListsError::DatabaseError(err)),
+    })
+}
+
+fn extract_one<T: DbObject>(result: &mut mysql::QueryResult) -> ListsResult<T> {
+    let row = dbtry!(result.next().ok_or(mysql::Error::IoError(
+        std::io::Error::new(std::io::ErrorKind::NotFound, "Couldn't extract one item."))));
+    let obj = T::from_row(dbtry!(row));
+    assert!(result.next().is_none(), "Duplicate entry");
+    return Ok(obj);
+}
+
+fn to_vec<T: DbObject>(query_result: mysql::QueryResult) -> ListsResult<Vec<T>> {
+    return query_result.map(|row_result| {
+        return Ok(T::from_row(dbtry!(row_result)));
+    }).collect();
+}
+
+
 impl Db {
-    pub fn fetch_all_lists(&self, user: &User) -> DbResult<Vec<List>> {
-        return to_vector::<List>(
-            try!(self.conn.prep_exec("SELECT lists.lists.id, lists.lists.name FROM lists.list_users LEFT JOIN lists.lists ON lists.list_users.list_id = lists.lists.id WHERE lists.list_users.user_id = ?", (user.id,))));
+    pub fn fetch_all_lists(&self, user: &User) -> ListsResult<Vec<List>> {
+        return to_vec::<List>(
+            dbtry!(self.conn.prep_exec("SELECT lists.lists.id, lists.lists.name FROM lists.list_users LEFT JOIN lists.lists ON lists.list_users.list_id = lists.lists.id WHERE lists.list_users.user_id = ?", (user.id,))));
     }
 
-    pub fn fetch_all_users(&self, ) -> DbResult<Vec<User>> {
-        return to_vector::<User>(
-            try!(self.conn.prep_exec("SELECT id, name FROM lists.users", ())))
+    pub fn fetch_all_users(&self, ) -> ListsResult<Vec<User>> {
+        return to_vec::<User>(
+            dbtry!(self.conn.prep_exec("SELECT id, name FROM lists.users", ())))
     }
 
-    pub fn lookup_user(&self, id: i64) -> DbResult<User> {
-        let mut result = try!(self.conn.prep_exec("SELECT id, name FROM lists.users WHERE id = ?", (id,)));
-        return Db::extract_one(&mut result);
+    pub fn lookup_user(&self, id: i64) -> ListsResult<User> {
+        let mut result = dbtry!(self.conn.prep_exec("SELECT id, name FROM lists.users WHERE id = ?", (id,)));
+        return extract_one(&mut result);
     }
 
-    pub fn lookup_list(&self, list_id: i64) -> DbResult<FullList> {
-        let mut list_result = try!(self.conn.prep_exec("SELECT id, name FROM lists.lists WHERE id = ?", (list_id,)));
-        let list = try!(Db::extract_one::<List>(&mut list_result));
+    pub fn lookup_list(&self, list_id: i64) -> ListsResult<FullList> {
+        let mut list_result = dbtry!(self.conn.prep_exec("SELECT id, name FROM lists.lists WHERE id = ?", (list_id,)));
+        let list = try!(extract_one::<List>(&mut list_result));
         
-        let db_items = try!(to_vector::<DbItem>(
-            try!(self.conn.prep_exec("SELECT id, name, description FROM lists.items WHERE list_id = ?", (list_id,)))));
+        let db_items = dbtry!(to_vector::<DbItem>(
+            dbtry!(self.conn.prep_exec("SELECT id, name, description FROM lists.items WHERE list_id = ?", (list_id,)))));
 
-        let db_annotations = try!(to_vector::<DbAnnotation>(
-            try!(self.conn.prep_exec("SELECT lists.item_annotations.id, lists.items.id, lists.item_annotations.kind, lists.item_annotations.body FROM lists.items JOIN lists.item_annotations ON lists.items.id = lists.item_annotations.item_id WHERE lists.items.list_id = ?", (list_id,)))));
+        let db_annotations = dbtry!(to_vector::<DbAnnotation>(
+            dbtry!(self.conn.prep_exec("SELECT lists.item_annotations.id, lists.items.id, lists.item_annotations.kind, lists.item_annotations.body FROM lists.items JOIN lists.item_annotations ON lists.items.id = lists.item_annotations.item_id WHERE lists.items.list_id = ?", (list_id,)))));
 
         let mut full_items : Vec<FullItem> = vec![];
         
@@ -75,33 +101,26 @@ impl Db {
         });
     }
 
-    pub fn add_item(&self, list_id: i64, name: &str, description: &str) -> DbResult<Item> {
+    pub fn add_item(&self, list_id: i64, name: &str, description: &str) -> ListsResult<Item> {
         let mut conn = self.conn.get_conn().unwrap();
-        let _ = try!(conn.prep_exec("INSERT INTO lists.items (list_id, name, description) VALUES (?, ?, ?)", (list_id, name, description)));
+        let _ = dbtry!(conn.prep_exec("INSERT INTO lists.items (list_id, name, description) VALUES (?, ?, ?)", (list_id, name, description)));
 
-        let mut result = try!(conn.prep_exec("SELECT id, name, description FROM lists.items WHERE id = LAST_INSERT_ID()", ()));
-        return Db::extract_one::<DbItem>(&mut result);
+        let mut result = dbtry!(conn.prep_exec("SELECT id, name, description FROM lists.items WHERE id = LAST_INSERT_ID()", ()));
+        return extract_one::<DbItem>(&mut result);
     }
 
-    pub fn delete_item(&self, item_id: i64) -> DbResult<()> {
-        let _ = try!(self.conn.prep_exec("DELETE FROM lists.items WHERE id = ?", (item_id,)));
+    pub fn delete_item(&self, item_id: i64) -> ListsResult<()> {
+        let _ = dbtry!(self.conn.prep_exec("DELETE FROM lists.items WHERE id = ?", (item_id,)));
         return Ok(());
     }
 
-    pub fn add_annotation(&self, item_id: i64, kind: &str, body: &str) -> DbResult<Annotation> {
+    pub fn add_annotation(&self, item_id: i64, kind: &str, body: &str) -> ListsResult<Annotation> {
         let mut conn = self.conn.get_conn().unwrap();
         // TODO: create a "kind" enum
-        let _ = try!(conn.prep_exec("INSERT INTO lists.item_annotations (item_id, kind, body) VALUES (?, ?, ?)", (item_id, kind, body)));
+        let _ = dbtry!(conn.prep_exec("INSERT INTO lists.item_annotations (item_id, kind, body) VALUES (?, ?, ?)", (item_id, kind, body)));
 
-        let mut result = try!(conn.prep_exec("SELECT id, item_id, kind, body FROM lists.item_annotations WHERE id = LAST_INSERT_ID()", ()));
-        return Db::extract_one::<Annotation>(&mut result);
+        let mut result = dbtry!(conn.prep_exec("SELECT id, item_id, kind, body FROM lists.item_annotations WHERE id = LAST_INSERT_ID()", ()));
+        return extract_one::<Annotation>(&mut result);
     }
     
-    fn extract_one<T: DbObject>(result: &mut mysql::QueryResult) -> DbResult<T> {
-        let row = try!(result.next().ok_or(mysql::Error::IoError(
-            std::io::Error::new(std::io::ErrorKind::NotFound, "Couldn't extract one item."))));
-        let obj = T::from_row(try!(row));
-        assert!(result.next().is_none(), "Duplicate entry");
-        return Ok(obj);
-    }
 }
