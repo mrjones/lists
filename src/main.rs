@@ -391,6 +391,17 @@ impl ServerContext {
     }
 }
 
+fn lookup_param<T : std::str::FromStr>(param_name: &str, context: &rustful::Context) -> ListsResult<T> {
+    let param_str =
+        try!(context.variables.get(param_name)
+             .ok_or(ListsError::MissingParam(param_name.to_string())))
+        .to_string();
+
+    return param_str.parse::<T>().map_err(|_| {
+        return ListsError::InvalidParam;
+    });
+}
+
 fn list_users(server_context: &ServerContext, _: rustful::Context) -> ListsResult<Box<ToJson>> {
     return Ok(Box::new(try!(server_context.db.fetch_all_users())));
 }
@@ -400,22 +411,15 @@ fn all_lists(server_context: &ServerContext, user: &User, _: rustful::Context) -
 }
 
 fn one_list(server_context: &ServerContext, _: &User, context: rustful::Context) -> ListsResult<Box<ToJson>> {
-    let list_id = context.variables.get("list_id")
-        .expect("no list_id param")
-        .to_string().parse::<i64>()
-        .expect("couldn't parse list_id");
+    let list_id = try!(lookup_param::<i64>("list_id", &context));
     return Ok(Box::new(try!(server_context.db.lookup_list(list_id))));
 }
 
-fn delete_item(server_context: &ServerContext, user: &User, mut context: rustful::Context) -> ListsResult<Box<ToJson>> {
+fn delete_item(server_context: &ServerContext, _: &User, context: rustful::Context) -> ListsResult<Box<ToJson>> {
     // TODO: check item belongs to list
     // TODO: check user can edit list
-    
-    let item_id = context.variables.get("item_id")
-        .expect("no item_id param")
-        .to_string().parse::<i64>()
-        .expect("couldn't parse item_id");
 
+    let item_id = try!(lookup_param::<i64>("item_id", &context));
     return Ok(Box::new(try!(server_context.db.delete_item(item_id))));
 }
 
@@ -429,11 +433,7 @@ fn add_item(server_context: &ServerContext, user: &User, mut context: rustful::C
     println!("add_item :: they posted: {:?}", item);
 
     // TODO: lift out a level?
-    let list_id = context.variables.get("list_id")
-        .expect("no list_id param")
-        .to_string().parse::<i64>()
-        .expect("couldn't parse list_id");
-
+    let list_id = try!(lookup_param::<i64>("list_id", &context));
     let db_item = try!(server_context.db.add_item(list_id, &item.name, &item.description));
     
     return Ok(Box::new(FullItem{
@@ -456,11 +456,7 @@ fn add_annotation(server_context: &ServerContext, user: &User, mut context: rust
     println!("add_annotation :: they posted: {:?}", annotation);
 
     // TODO: lift out a level?
-    let item_id = context.variables.get("item_id")
-        .expect("no item_id param")
-        .to_string().parse::<i64>()
-        .expect("couldn't parse item_id");
-
+    let item_id = try!(lookup_param::<i64>("item_id", &context));
     // TODO: check item belongs to list and user has permission
     return Ok(Box::new(try!(server_context.db.add_annotation(item_id, &annotation.kind, &annotation.body))));
 }
@@ -499,11 +495,7 @@ impl rustful::Handler for Api {
                 let server_context : &ServerContext =
                     context.global.get().expect("Couldn't get server_context");
 
-                let user_id = context.variables.get("user_id")
-                    .expect("no user_id param")
-                    .to_string()
-                    .parse::<i64>()
-                    .expect("couldn't parse user_id");
+                let user_id = lookup_param::<i64>("user_id", &context).unwrap();
                 let user = server_context.db.lookup_user(user_id)
                     .expect("couldn't look up user");
 
