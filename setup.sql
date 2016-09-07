@@ -1,3 +1,8 @@
+-- CREATE USER 'lists'@'localhost' IDENTIFIED BY 'lists';
+-- CREATE DATABASE lists;
+-- GRANT ALL ON lists.* TO 'lists'@'localhost';
+-- $ mysql -ulists -hlocalhost -plists < setup.sql 
+
 USE lists;
 
 DROP TABLE IF EXISTS item_annotations;

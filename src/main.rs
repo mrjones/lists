@@ -394,20 +394,14 @@ impl ServerContext {
 fn list_users(server_context: &ServerContext, _: rustful::Context) -> ListsResult<Box<ToJson>> {
     match server_context.db.fetch_all_users() {
         Ok(users) => return Ok(Box::new(users)),
-        Err(e) => {
-            println!("DB Error: {:?}", e);
-            return Err(ListsError::DatabaseError);
-        },
+        Err(e) => return Err(ListsError::DatabaseError(e)),
     }
 }
 
 fn all_lists(server_context: &ServerContext, user: &User, _: rustful::Context) -> ListsResult<Box<ToJson>> {
     match server_context.db.fetch_all_lists(user) {
         Ok(lists) => return Ok(Box::new(lists)),
-        Err(e) => {
-            println!("DB Error: {:?}", e);
-            return Err(ListsError::DatabaseError);
-        },
+        Err(e) => return Err(ListsError::DatabaseError(e)),
     }
 }
 
@@ -418,10 +412,7 @@ fn one_list(server_context: &ServerContext, user: &User, context: rustful::Conte
         .expect("couldn't parse list_id");
     match server_context.db.lookup_list(list_id) {
         Ok(list) => return Ok(Box::new(list)),
-        Err(e) => {
-            println!("DB Error: {:?}", e);
-            return Err(ListsError::DatabaseError);
-        },
+        Err(e) => return Err(ListsError::DatabaseError(e)),
     }
 }
 
@@ -436,10 +427,7 @@ fn delete_item(server_context: &ServerContext, user: &User, mut context: rustful
 
     match server_context.db.delete_item(item_id) {
         Ok(list) => return Ok(Box::new("".to_string())),
-        Err(e) => {
-            println!("DB Error: {:?}", e);
-            return Err(ListsError::DatabaseError);
-        },
+        Err(e) => return Err(ListsError::DatabaseError(e)),
     }
 }
 
@@ -465,10 +453,7 @@ fn add_item(server_context: &ServerContext, user: &User, mut context: rustful::C
             description: db_item.description,
             link_annotations: vec![],
         })),
-        Err(e) => {
-            println!("DB Error: {:?}", e);
-            return Err(ListsError::DatabaseError);
-        },
+        Err(e) => return Err(ListsError::DatabaseError(e)),
     }
 }
 
@@ -492,10 +477,7 @@ fn add_annotation(server_context: &ServerContext, user: &User, mut context: rust
     // TODO: check item belongs to list and user has permission
     match server_context.db.add_annotation(item_id, &annotation.kind, &annotation.body) {
         Ok(db_annotation) => return Ok(Box::new(db_annotation)),
-        Err(e) => {
-            println!("DB Error: {:?}", e);
-            return Err(ListsError::DatabaseError);
-        },
+        Err(e) => return Err(ListsError::DatabaseError(e)),
     }
 }
 
