@@ -400,7 +400,7 @@ fn lookup_param<T : std::str::FromStr>(param_name: &str, context: &rustful::Cont
     });
 }
 
-fn list_users(server_context: &ServerContext, _: rustful::Context) -> ListsResult<Box<ToJson>> {
+fn all_users(server_context: &ServerContext, _: rustful::Context) -> ListsResult<Box<ToJson>> {
     return Ok(Box::new(try!(server_context.db.fetch_all_users())));
 }
 
@@ -411,6 +411,11 @@ fn all_lists(server_context: &ServerContext, user: &User, _: rustful::Context) -
 fn one_list(server_context: &ServerContext, _: &User, context: rustful::Context) -> ListsResult<Box<ToJson>> {
     let list_id = try!(lookup_param::<i64>("list_id", &context));
     return Ok(Box::new(try!(server_context.db.lookup_list(list_id))));
+}
+
+fn list_accessors(server_context: &ServerContext, _: &User, context: rustful::Context) -> ListsResult<Box<ToJson>> {
+    let list_id = try!(lookup_param::<i64>("list_id", &context));
+    return Ok(Box::new(try!(server_context.db.fetch_list_accessors(list_id))));
 }
 
 fn delete_item(server_context: &ServerContext, _: &User, context: rustful::Context) -> ListsResult<Box<ToJson>> {
@@ -515,7 +520,7 @@ fn serve_rustful(port: u16) {
                 Get: Api::StaticFile{filename: "static/app.js"},
             },
             "/users" => {
-                Get: Api::LoggedOutHandler{handler: list_users},
+                Get: Api::LoggedOutHandler{handler: all_users},
             },
             "/lists/:user_id" => {
                 Get: Api::LoggedInHandler{handler: all_lists},
@@ -528,6 +533,9 @@ fn serve_rustful(port: u16) {
                             },
                         },
                         Post: Api::LoggedInHandler{handler: add_item},
+                    },
+                    "/accessors" => {
+                        Get: Api::LoggedInHandler{handler: list_accessors},
                     },
                     Get: Api::LoggedInHandler{handler: one_list},
                 },

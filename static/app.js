@@ -239,6 +239,7 @@ var List = React.createClass({
           </ul>
         </div>
         <AddItemWidget userId={this.props.params.userId} listId={this.props.params.listId} itemAddedFn={this.itemAdded} />
+        <SharingWidget myUserId={this.props.params.userId} listId={this.props.params.listId} />
       </div>
     );
   }
@@ -278,6 +279,45 @@ var ListPicker = React.createClass({
       </div>
     );
   }
+});
+
+var SharingWidget = React.createClass({
+  getInitialState: function() {
+    return {loaded: false, allUsers: []};
+  },
+  componentDidMount() {
+    var url = `/lists/${this.props.myUserId}/list/${this.props.listId}/accessors`;
+    $.ajax({
+      url: url,
+      dataType: 'json',
+      cache: false,
+      success: function(data) {
+        this.setState({loaded: true, allUsers: data});
+      }.bind(this),
+      error: function(xhr, status, err) {
+        console.error(url, status, err.toString());        
+      }.bind(this)
+    });
+
+  },
+  render: function() {
+    if (!this.state.loaded) {
+      return (
+        <div>Loading...</div>
+      );
+    }
+
+    var allUserNodes = this.state.allUsers.map(function(user) {
+      return <li key={user.id}>{user.name}</li>;
+    });
+    
+    return (
+      <div>
+        Shared with:
+        {allUserNodes}
+      </div>
+    );
+  },
 });
 
 // ReactDOM.render(

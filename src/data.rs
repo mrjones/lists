@@ -9,7 +9,6 @@ use model::Annotation;
 use model::Item;
 use model::List;
 use model::User;
-use util::to_vector;
 
 use result::ListsError;
 use result::ListsResult;
@@ -66,10 +65,10 @@ impl Db {
         let mut list_result = dbtry!(self.conn.prep_exec("SELECT id, name FROM lists.lists WHERE id = ?", (list_id,)));
         let list = try!(extract_one::<List>(&mut list_result));
         
-        let db_items = dbtry!(to_vector::<DbItem>(
+        let db_items = try!(to_vec::<DbItem>(
             dbtry!(self.conn.prep_exec("SELECT id, name, description FROM lists.items WHERE list_id = ?", (list_id,)))));
 
-        let db_annotations = dbtry!(to_vector::<DbAnnotation>(
+        let db_annotations = try!(to_vec::<DbAnnotation>(
             dbtry!(self.conn.prep_exec("SELECT lists.item_annotations.id, lists.items.id, lists.item_annotations.kind, lists.item_annotations.body FROM lists.items JOIN lists.item_annotations ON lists.items.id = lists.item_annotations.item_id WHERE lists.items.list_id = ?", (list_id,)))));
 
         let mut full_items : Vec<FullItem> = vec![];
@@ -101,6 +100,11 @@ impl Db {
         });
     }
 
+    pub fn fetch_list_accessors(&self, list_id: i64) -> ListsResult<Vec<User>> {
+        return to_vec::<User>(
+            dbtry!(self.conn.prep_exec("SELECT lists.users.id, lists.users.name FROM lists.list_users LEFT JOIN lists.users ON lists.list_users.user_id = lists.users.id WHERE lists.list_users.list_id = ?", (list_id,))));
+    }
+    
     pub fn add_item(&self, list_id: i64, name: &str, description: &str) -> ListsResult<Item> {
         let mut conn = self.conn.get_conn().unwrap();
         let _ = dbtry!(conn.prep_exec("INSERT INTO lists.items (list_id, name, description) VALUES (?, ?, ?)", (list_id, name, description)));
