@@ -140,8 +140,8 @@ var AddItemWidget = React.createClass({
   handleSubmit: function(e) {
     e.preventDefault();
     var item = {
-      name: this.state.name.trim(),
-      description: this.state.description.trim(),
+      name: this.state.name,
+      description: this.state.description,
     };
     if (!item.name || !item.description) {
       return;
@@ -245,6 +245,40 @@ var List = React.createClass({
   }
 });
 
+var NewListWidget = React.createClass({
+  getInitialState: function() {
+    return {listName: ""};
+  },
+  handleSubmit: function(e) {
+    e.preventDefault();
+    var url = `/lists/${this.props.userId}/list`;
+    var list = {name: this.state.listName};
+    $.ajax({
+      url: url,
+      dataType: 'json',
+      type: 'POST',
+      data: JSON.stringify(list),
+      success: function(data) {
+        this.props.listAddedFn(data);
+      }.bind(this),
+      error: function(xhr, status, err) {
+        console.error(url, status, err.toString());
+      }.bind(this),
+    });
+  },
+  handleListNameChange(e) {
+    this.setState({listName: e.target.value});
+  },
+  render: function() {
+    return (
+      <form onSubmit={this.handleSubmit}>
+        <input name="name" type="text" placeholder="New list name" value={this.state.listName} onChange={this.handleListNameChange} />
+        <input type="submit" value="+" />
+      </form>
+    );
+  }
+});
+
 var ListPicker = React.createClass({
   getInitialState: function() {
     return {lists: []};
@@ -263,19 +297,48 @@ var ListPicker = React.createClass({
       }.bind(this)
     });
   },
+  removeList: function(e) {
+    var list_id = e.target.value;
+    var url = `/lists/${this.props.userId}/list/${list_id}`;
+    console.log("Deleting " + list_id);
+    $.ajax({
+      url: url,
+      type: 'DELETE',
+      dataType: 'json',
+      cache: false,
+      success: function(data) {
+        this.listRemoved(list_id);
+      }.bind(this),
+      error: function(xhr, status, err) {
+        console.error(url, status, err.toString());        
+      }.bind(this)
+    });
+  },
+  listRemoved: function(list_id) {
+    this.setState({lists: this.state.lists.filter(function(list) {
+      return list.id != list_id;
+    })});
+  },
+  listAdded: function(list) {
+    this.setState({lists: this.state.lists.concat([list])});
+  },
   render: function() {
     var listNodes = this.state.lists.map(function(list) {
       return (
-        <div className="list" key={list.id}>
+        <li className="list" key={list.id}>
           <ReactRouter.Link to={`/lists/${this.props.userId}/list/${list.id}`}>
             {list.name}
           </ReactRouter.Link>
-        </div>
+          &nbsp;<button onClick={this.removeList} value={list.id}>X</button>
+        </li>
       );
     }, this);
     return (
       <div>
-        {listNodes}
+        <ul>
+          {listNodes}
+        </ul>
+        <NewListWidget userId={this.props.userId} listAddedFn={this.listAdded}/>
       </div>
     );
   }

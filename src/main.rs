@@ -418,12 +418,32 @@ fn list_accessors(server_context: &ServerContext, _: &User, context: rustful::Co
     return Ok(Box::new(try!(server_context.db.fetch_list_accessors(list_id))));
 }
 
+fn delete_list(server_context: &ServerContext, _: &User, context: rustful::Context) -> ListsResult<Box<ToJson>> {
+    let list_id = try!(lookup_param::<i64>("list_id", &context));
+    println!("delete_list :: {}", list_id);
+    return Ok(Box::new(try!(server_context.db.delete_list(list_id))));
+}
+
 fn delete_item(server_context: &ServerContext, _: &User, context: rustful::Context) -> ListsResult<Box<ToJson>> {
     // TODO: check item belongs to list
     // TODO: check user can edit list
 
     let item_id = try!(lookup_param::<i64>("item_id", &context));
     return Ok(Box::new(try!(server_context.db.delete_item(item_id))));
+}
+
+fn add_list(server_context: &ServerContext, user: &User, mut context: rustful::Context) -> ListsResult<Box<ToJson>> {
+    #[derive(Debug, RustcDecodable)]
+    struct NewList {
+        name: String,
+    }
+    let list : NewList = context.body.decode_json_body().expect("decoding item");
+    println!("add_list :: they posted: {:?}", list);
+
+    // TODO: lift out a level?
+    let db_list = try!(server_context.db.add_list(&list.name, user.id));
+    
+    return Ok(Box::new(db_list));
 }
 
 fn add_item(server_context: &ServerContext, _: &User, mut context: rustful::Context) -> ListsResult<Box<ToJson>> {
@@ -524,21 +544,25 @@ fn serve_rustful(port: u16) {
             },
             "/lists/:user_id" => {
                 Get: Api::LoggedInHandler{handler: all_lists},
-                "/list/:list_id" => {
-                    "/items" => {
-                        "/:item_id" => {
-                            Delete: Api::LoggedInHandler{handler: delete_item},
-                            "/annotations" => {
-                                Post: Api::LoggedInHandler{handler: add_annotation},
+                "/list/" => {
+                    Post: Api::LoggedInHandler{handler: add_list},
+                    ":list_id" => {
+                        Get: Api::LoggedInHandler{handler: one_list},
+                        Delete: Api::LoggedInHandler{handler: delete_list},
+                        "/items" => {
+                            Post: Api::LoggedInHandler{handler: add_item},
+                            "/:item_id" => {
+                                Delete: Api::LoggedInHandler{handler: delete_item},
+                                "/annotations" => {
+                                    Post: Api::LoggedInHandler{handler: add_annotation},
+                                },
                             },
                         },
-                        Post: Api::LoggedInHandler{handler: add_item},
+                        "/accessors" => {
+                            Get: Api::LoggedInHandler{handler: list_accessors},
+                        },
                     },
-                    "/accessors" => {
-                        Get: Api::LoggedInHandler{handler: list_accessors},
-                    },
-                    Get: Api::LoggedInHandler{handler: one_list},
-                },
+                }
             }
             
         }

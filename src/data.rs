@@ -104,6 +104,21 @@ impl Db {
         return to_vec::<User>(
             dbtry!(self.conn.prep_exec("SELECT lists.users.id, lists.users.name FROM lists.list_users LEFT JOIN lists.users ON lists.list_users.user_id = lists.users.id WHERE lists.list_users.list_id = ?", (list_id,))));
     }
+
+    pub fn add_list(&self, list_name: &str, owner_id: i64) -> ListsResult<List> {
+        let mut conn = self.conn.get_conn().unwrap();
+        let _ = dbtry!(conn.prep_exec("INSERT INTO lists.lists (name) VALUES (?)", (list_name,)));
+
+        let ret;
+        {
+            let mut list_result = dbtry!(conn.prep_exec("SELECT id, name FROM lists.lists WHERE id = LAST_INSERT_ID()", ()));
+            ret = extract_one::<List>(&mut list_result);
+        }
+
+        let _ = dbtry!(conn.prep_exec("INSERT INTO lists.list_users (user_id, list_id) VALUES (?, LAST_INSERT_ID())", (owner_id, )));
+
+        return ret;
+    }
     
     pub fn add_item(&self, list_id: i64, name: &str, description: &str) -> ListsResult<Item> {
         let mut conn = self.conn.get_conn().unwrap();
@@ -113,6 +128,14 @@ impl Db {
         return extract_one::<DbItem>(&mut result);
     }
 
+    pub fn delete_list(&self, list_id: i64) -> ListsResult<()> {
+        let _ = dbtry!(self.conn.prep_exec("DELETE FROM lists.item_annotations WHERE item_id IN (SELECT id FROM lists.items WHERE list_id = ?)", (list_id,)));
+        let _ = dbtry!(self.conn.prep_exec("DELETE FROM lists.items WHERE list_id = ?", (list_id,)));
+        let _ = dbtry!(self.conn.prep_exec("DELETE FROM lists.list_users WHERE list_id = ?", (list_id,)));
+        let _ = dbtry!(self.conn.prep_exec("DELETE FROM lists.lists WHERE id = ?", (list_id,)));
+        return Ok(());        
+    }
+    
     pub fn delete_item(&self, item_id: i64) -> ListsResult<()> {
         let _ = dbtry!(self.conn.prep_exec("DELETE FROM lists.items WHERE id = ?", (item_id,)));
         return Ok(());
