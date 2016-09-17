@@ -24,6 +24,7 @@ use std::io::Read;
 mod data;
 mod model;
 mod result;
+mod scrape;
 mod util;
 
 use model::*;
@@ -175,7 +176,7 @@ fn show_one_list_handler(req: &mut iron::request::Request) -> iron::IronResult<i
 
     match env.user {
         // TODO(mrjones): propagate error
-        Err(_) => return Err(into_iron_error(ListsError::Unknown)),
+        Err(ref e) => return Err(into_iron_error(ListsError::Unknown(format!("{}", e)))),
         Ok(ref user) => {
             // TODO(mrjones): check permissions?
             let list_id = itry!(

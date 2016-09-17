@@ -3,6 +3,7 @@ name = "lists"
 version = "0.1.0"
 dependencies = [
  "handlebars-iron 0.18.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "hyper 0.9.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "iron 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "mount 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "mysql 5.2.2 (registry+https://github.com/rust-lang/crates.io-index)",

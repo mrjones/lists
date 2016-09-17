@@ -10,8 +10,9 @@ pub enum ListsError {
     DatabaseError(mysql::Error),
     DoesNotExist,
     InconsistentDatabase(String),
-
-    Unknown,
+    IoError(std::io::Error),
+    
+    Unknown(String),
 }
 
 impl std::fmt::Display for ListsError {
@@ -29,11 +30,14 @@ impl std::fmt::Display for ListsError {
             ListsError::DoesNotExist => {
                 try!(write!(f, "Does Not Exist"));
             },
-            ListsError::Unknown => {
-                try!(write!(f, "Unknown Error"));
+            ListsError::Unknown(ref more) => {
+                try!(write!(f, "Unknown Error: {}", more));
             },
             ListsError::InconsistentDatabase(ref more) => {
                 try!(write!(f, "Inconsistent Dababase: {}", more));
+            },
+            ListsError::IoError(ref err) => {
+                try!(write!(f, "IO Error: {}", err));
             }
         }
 
@@ -48,8 +52,9 @@ impl std::error::Error for ListsError {
             ListsError::InvalidParam => "InvalidParam",
             ListsError::DatabaseError(_) => "DatabaseError",
             ListsError::DoesNotExist => "DoesNotExist",
-            ListsError::Unknown => "Unknown",
+            ListsError::Unknown(_) => "Unknown",
             ListsError::InconsistentDatabase(_) => "InconsistentDababase",
+            ListsError::IoError(_) => "IoError",
         }
     }
 
@@ -58,6 +63,12 @@ impl std::error::Error for ListsError {
             ListsError::DatabaseError(ref err) => return Some(err),
             _ => return None,
         }
+    }
+}
+
+impl std::convert::From<std::io::Error> for ListsError {
+    fn from(err: std::io::Error) -> ListsError {
+        return ListsError::IoError(err);
     }
 }
 
