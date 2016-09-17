@@ -346,38 +346,125 @@ var ListPicker = React.createClass({
 
 var SharingWidget = React.createClass({
   getInitialState: function() {
-    return {loaded: false, allUsers: []};
+    return {
+      sharedWithLoaded: false,
+      allUsersLoaded: false,
+      sharedWithUsers: [],
+      allUsers: []
+    };
   },
-  componentDidMount() {
+  byId: function(a, b) {
+    return a.id - b.id;
+  },
+  fetchAccessors: function() {
     var url = `/lists/${this.props.myUserId}/list/${this.props.listId}/accessors`;
     $.ajax({
       url: url,
       dataType: 'json',
       cache: false,
       success: function(data) {
-        this.setState({loaded: true, allUsers: data});
+        data.sort(this.byId);
+        this.setState({sharedWithLoaded: true, sharedWithUsers: data});
       }.bind(this),
       error: function(xhr, status, err) {
         console.error(url, status, err.toString());        
       }.bind(this)
     });
+  },
+  fetchAllUsers: function() {
+    var url = `/users`
+    $.ajax({
+      url: url,
+      dataType: 'json',
+      cache: false,
+      success: function(data) {
+        data.sort(this.byId);
+        this.setState({allUsersLoaded: true, allUsers: data});
+      }.bind(this),
+      error: function(xhr, status, err) {
+        console.error(url, status, err.toString());
+      }.bind(this),
+    });
+  },
+  componentDidMount: function() {
+    this.fetchAccessors();
+    this.fetchAllUsers();
+  },
+  assertSortedById: function(a) {
+    for (var i = 1; i < a.length; i++) {
+      if (a[i-1].id > a[i].id) {
+        console.error("Not sorted at index " + i);
+      }
+    }
+  },
+  unsharedUsers: function() {
+    this.assertSortedById(this.state.allUsers);
+    this.assertSortedById(this.state.sharedWithUsers);
 
+    var unshared = [];
+    var sharedIdx = 0;
+    for (var allIdx = 0; allIdx < this.state.allUsers.length; allIdx++) {
+      while (sharedIdx < this.state.sharedWithUsers.length &&
+             (this.state.sharedWithUsers[sharedIdx].id <
+               this.state.allUsers[allIdx].id)) {
+        sharedIdx++;
+      }
+      if (sharedIdx == this.state.sharedWithUsers.length ||
+          (this.state.sharedWithUsers[sharedIdx].id >
+            this.state.allUsers[allIdx].id)) {
+        unshared.push(this.state.allUsers[allIdx]);
+      }
+    }
+
+    return unshared;
+  },
+  addUserToList: function(userId) {
+    console.log("Add " + userId + " to " + this.props.listId);
+
+    var url = `/lists/${this.props.myUserId}/list/${this.props.listId}/accessors`
+    $.ajax({
+      url: url,
+      dataType: 'json',
+      type: 'POST',
+      data: JSON.stringify({userId: userId}),
+      cache: false,
+      success: function(data) {
+        this.setState({sharedWithUsers: data});
+      }.bind(this),
+      error: function(xhr, status, err) {
+        console.error(url, status, err.toString());
+      }.bind(this),
+    });
   },
   render: function() {
-    if (!this.state.loaded) {
+    if (!this.state.sharedWithLoaded || !this.state.allUsersLoaded) {
       return (
         <div>Loading...</div>
       );
     }
 
-    var allUserNodes = this.state.allUsers.map(function(user) {
+    var allUserNodes = this.state.sharedWithUsers.map(function(user) {
       return <li key={user.id}>{user.name}</li>;
     });
+
+    var unsharedUserNodes = this.unsharedUsers().map(function(user) {
+      return <li key={user.id}>
+          {user.name}
+          <button onClick={this.addUserToList.bind(this, user.id)}>+</button>
+      </li>;
+    }.bind(this));
     
     return (
       <div>
         Shared with:
-        {allUserNodes}
+        <ul>
+          {allUserNodes}
+        </ul>
+
+        Not Shared with:
+        <ul>
+          {unsharedUserNodes}
+        </ul>
       </div>
     );
   },

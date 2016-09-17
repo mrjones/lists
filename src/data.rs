@@ -149,5 +149,12 @@ impl Db {
         let mut result = dbtry!(conn.prep_exec("SELECT id, item_id, kind, body FROM lists.item_annotations WHERE id = LAST_INSERT_ID()", ()));
         return extract_one::<Annotation>(&mut result);
     }
-    
+
+    pub fn add_user_to_list(&self, list_id: i64, user_id: i64) -> ListsResult<()> {
+        let mut conn = self.conn.get_conn().unwrap();
+        let _ = dbtry!(conn.prep_exec("INSERT INTO lists.list_users (list_id, user_id) VALUES (?, ?)", (list_id, user_id)));
+
+        return Ok(());
+    }
+
 }

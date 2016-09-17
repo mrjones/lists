@@ -418,6 +418,21 @@ fn list_accessors(server_context: &ServerContext, _: &User, context: rustful::Co
     return Ok(Box::new(try!(server_context.db.fetch_list_accessors(list_id))));
 }
 
+fn add_user_to_list(server_context: &ServerContext, user: &User, mut context: rustful::Context) -> ListsResult<Box<ToJson>> {
+    #[derive(Debug, RustcDecodable)]
+    struct NewUser {
+        userId: i64,
+    }
+    let new_user : NewUser = context.body.decode_json_body().expect("decoding user");
+    println!("add_user_to_list :: they posted: {:?}", new_user);
+
+    // TODO: lift out a level?
+    let list_id = try!(lookup_param::<i64>("list_id", &context));
+    try!(server_context.db.add_user_to_list(list_id, new_user.userId));
+    
+    return list_accessors(server_context, user, context);
+}
+
 fn delete_list(server_context: &ServerContext, _: &User, context: rustful::Context) -> ListsResult<Box<ToJson>> {
     let list_id = try!(lookup_param::<i64>("list_id", &context));
     println!("delete_list :: {}", list_id);
@@ -560,6 +575,7 @@ fn serve_rustful(port: u16) {
                         },
                         "/accessors" => {
                             Get: Api::LoggedInHandler{handler: list_accessors},
+                            Post: Api::LoggedInHandler{handler: add_user_to_list},
                         },
                     },
                 }
