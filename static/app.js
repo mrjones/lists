@@ -419,14 +419,28 @@ var SharingWidget = React.createClass({
     return unshared;
   },
   addUserToList: function(userId) {
-    console.log("Add " + userId + " to " + this.props.listId);
-
     var url = `/lists/${this.props.myUserId}/list/${this.props.listId}/accessors`
     $.ajax({
       url: url,
       dataType: 'json',
       type: 'POST',
-      data: JSON.stringify({userId: userId}),
+      data: JSON.stringify({id: userId}),
+      cache: false,
+      success: function(data) {
+        this.setState({sharedWithUsers: data});
+      }.bind(this),
+      error: function(xhr, status, err) {
+        console.error(url, status, err.toString());
+      }.bind(this),
+    });
+  },
+  removeUserFromList: function(userId) {
+    var url = `/lists/${this.props.myUserId}/list/${this.props.listId}/accessors`
+    $.ajax({
+      url: url,
+      dataType: 'json',
+      type: 'DELETE',
+      data: JSON.stringify({id: userId}),
       cache: false,
       success: function(data) {
         this.setState({sharedWithUsers: data});
@@ -444,8 +458,14 @@ var SharingWidget = React.createClass({
     }
 
     var allUserNodes = this.state.sharedWithUsers.map(function(user) {
-      return <li key={user.id}>{user.name}</li>;
-    });
+      var deleteButton;
+      if (this.props.myUserId != user.id) {
+        deleteButton = (
+          <button onClick={this.removeUserFromList.bind(this, user.id)}>X</button>
+        );
+      }
+      return <li key={user.id}>{user.name}{deleteButton}</li>;
+    }.bind(this));
 
     var unsharedUserNodes = this.unsharedUsers().map(function(user) {
       return <li key={user.id}>

@@ -421,14 +421,29 @@ fn list_accessors(server_context: &ServerContext, _: &User, context: rustful::Co
 fn add_user_to_list(server_context: &ServerContext, user: &User, mut context: rustful::Context) -> ListsResult<Box<ToJson>> {
     #[derive(Debug, RustcDecodable)]
     struct NewUser {
-        userId: i64,
+        id: i64,
     }
     let new_user : NewUser = context.body.decode_json_body().expect("decoding user");
     println!("add_user_to_list :: they posted: {:?}", new_user);
 
     // TODO: lift out a level?
     let list_id = try!(lookup_param::<i64>("list_id", &context));
-    try!(server_context.db.add_user_to_list(list_id, new_user.userId));
+    try!(server_context.db.add_user_to_list(list_id, new_user.id));
+    
+    return list_accessors(server_context, user, context);
+}
+
+fn remove_user_from_list(server_context: &ServerContext, user: &User, mut context: rustful::Context) -> ListsResult<Box<ToJson>> {
+    #[derive(Debug, RustcDecodable)]
+    struct OldUser {
+        id: i64,
+    }
+    let old_user : OldUser = context.body.decode_json_body().expect("decoding user");
+    println!("remove_user_from_list :: they posted: {:?}", old_user);
+
+    // TODO: lift out a level?
+    let list_id = try!(lookup_param::<i64>("list_id", &context));
+    try!(server_context.db.remove_user_from_list(list_id, old_user.id));
     
     return list_accessors(server_context, user, context);
 }
@@ -576,6 +591,7 @@ fn serve_rustful(port: u16) {
                         "/accessors" => {
                             Get: Api::LoggedInHandler{handler: list_accessors},
                             Post: Api::LoggedInHandler{handler: add_user_to_list},
+                            Delete: Api::LoggedInHandler{handler: remove_user_from_list},
                         },
                     },
                 }

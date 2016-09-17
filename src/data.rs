@@ -157,4 +157,11 @@ impl Db {
         return Ok(());
     }
 
+    pub fn remove_user_from_list(&self, list_id: i64, user_id: i64) -> ListsResult<()> {
+        let mut conn = self.conn.get_conn().unwrap();
+        let _ = dbtry!(conn.prep_exec("DELETE FROM lists.list_users WHERE list_id = ? AND user_id = ?", (list_id, user_id)));
+
+        return Ok(());
+    }
+
 }
