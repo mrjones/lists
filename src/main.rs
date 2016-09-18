@@ -25,6 +25,7 @@ mod data;
 mod model;
 mod result;
 mod scrape;
+mod streeteasy;
 mod util;
 
 use model::*;

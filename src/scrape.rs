@@ -1,7 +1,6 @@
 extern crate hyper;
 extern crate std;
 
-
 use result::ListsError;
 use result::ListsResult;
 use std::io::Read;
@@ -43,13 +42,37 @@ impl FakeHttpClient {
     }
 }
 
-pub struct Scraper<'a> {
-    client: &'a mut HttpClient,
+
+pub struct HyperHttpClient {
+    client: hyper::client::Client,
+}
+
+impl HttpClient for HyperHttpClient {
+    fn get(&mut self, url: &str) -> ListsResult<String> {
+        println!("GET {}", url);
+        let mut response = try!(self.client.get(url).send());
+        let mut body = String::new();
+        try!(response.read_to_string(&mut body));
+        return Ok(body);
+    }
+}
+
+impl HyperHttpClient {
+    pub fn new() -> HyperHttpClient {
+        return HyperHttpClient {
+            client: hyper::client::Client::new(),
+        }
+    }
+}
+
+pub struct Scraper {
+    client: std::sync::Arc<std::sync::Mutex<HttpClient>>,
     cache_dir: String,
 }
 
-impl<'a> Scraper<'a> {
-    pub fn new(client: &'a mut HttpClient, cache_dir: &str) -> Scraper<'a> {
+impl Scraper {
+    pub fn new(client: std::sync::Arc<std::sync::Mutex<HttpClient>>,
+               cache_dir: &str) -> Scraper {
         std::fs::create_dir_all(cache_dir).unwrap();
         return Scraper{
             client: client,
@@ -82,13 +105,14 @@ impl<'a> Scraper<'a> {
         let cache_filename = self.cache_filename(url);
 
         if self.has_recent_cache(&cache_filename) {
+            println!("Using cache {}", cache_filename.as_path().to_str().unwrap());
             let mut cache_file = try!(std::fs::File::open(cache_filename));
             let mut body = String::new();
             try!(cache_file.read_to_string(&mut body));
             return Ok(body);
         }
         
-        let body = try!(self.client.get(url));
+        let body = try!(self.client.lock().unwrap().get(url));
         let mut cache_file = try!(std::fs::File::create(
             cache_filename));
 
@@ -104,6 +128,8 @@ mod tests {
     
     use super::HttpClient;
     use super::FakeHttpClient;
+
+    use std::ops::DerefMut;
 
     const CACHE_DIR: &'static str = "/tmp/scrapecache/";
     
@@ -126,11 +152,12 @@ mod tests {
     fn simple_scrape() {
         std::fs::remove_dir_all(CACHE_DIR).ok();
 
-        let mut client = FakeHttpClient::new();
-        populate_pages(&mut client);
+        let client = std::sync::Arc::new(std::sync::Mutex::new(
+            FakeHttpClient::new()));
+        populate_pages(client.lock().unwrap().deref_mut());
 
         {
-            let mut scraper = super::Scraper::new(&mut client, CACHE_DIR);
+            let mut scraper = super::Scraper::new(client.clone(), CACHE_DIR);
             assert_eq!("It's google!".to_string(),
                        scraper.fetch("http://www.google.com").unwrap());
         }
@@ -140,11 +167,12 @@ mod tests {
     fn scrapes_are_cached() {
         std::fs::remove_dir_all(CACHE_DIR).ok();
 
-        let mut client = FakeHttpClient::new();
-        populate_pages(&mut client);
+        let client = std::sync::Arc::new(std::sync::Mutex::new(
+            FakeHttpClient::new()));
+        populate_pages(client.lock().unwrap().deref_mut());
 
         {
-            let mut scraper = super::Scraper::new(&mut client, CACHE_DIR);
+            let mut scraper = super::Scraper::new(client.clone(), CACHE_DIR);
 
             assert_eq!("It's google!".to_string(),
                        scraper.fetch("http://www.google.com").unwrap());
@@ -153,6 +181,6 @@ mod tests {
                        scraper.fetch("http://www.google.com").unwrap());
         }
 
-        assert_eq!(1, client.fetch_count());
+        assert_eq!(1, client.lock().unwrap().fetch_count());
     }
 }

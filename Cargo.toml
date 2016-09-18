@@ -5,12 +5,15 @@ authors = ["Matt Jones <jonesmr@gmail.com>"]
 
 [dependencies]
 handlebars-iron = "*"
+html5ever = "*"
 hyper = "*"
 iron = "*"
+kuchiki = "*"
 mount = "*"
 mysql = "*"
 persistent = "*"
 plugin = "*"
+regex = "*"
 router = "*"
 rustful = "*"
 rustc-serialize = "*"

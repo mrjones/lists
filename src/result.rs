@@ -1,5 +1,6 @@
-extern crate std;
+extern crate hyper;
 extern crate mysql;
+extern crate std;
 
 pub type ListsResult<T> = Result<T, ListsError>;
 
@@ -11,6 +12,7 @@ pub enum ListsError {
     DoesNotExist,
     InconsistentDatabase(String),
     IoError(std::io::Error),
+    HyperError(hyper::error::Error),  // This seems wrong
     
     Unknown(String),
 }
@@ -38,6 +40,9 @@ impl std::fmt::Display for ListsError {
             },
             ListsError::IoError(ref err) => {
                 try!(write!(f, "IO Error: {}", err));
+            },
+            ListsError::HyperError(ref err) => {
+                try!(write!(f, "HTTP Error: {}", err));
             }
         }
 
@@ -55,6 +60,7 @@ impl std::error::Error for ListsError {
             ListsError::Unknown(_) => "Unknown",
             ListsError::InconsistentDatabase(_) => "InconsistentDababase",
             ListsError::IoError(_) => "IoError",
+            ListsError::HyperError(_) => "HttpError",
         }
     }
 
@@ -69,6 +75,12 @@ impl std::error::Error for ListsError {
 impl std::convert::From<std::io::Error> for ListsError {
     fn from(err: std::io::Error) -> ListsError {
         return ListsError::IoError(err);
+    }
+}
+
+impl std::convert::From<hyper::error::Error> for ListsError {
+    fn from(err: hyper::error::Error) -> ListsError {
+        return ListsError::HyperError(err);
     }
 }
 
