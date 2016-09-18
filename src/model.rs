@@ -143,23 +143,29 @@ pub struct LinkAnnotation<'a> {
     pub url: &'a str,
 }
 
-#[derive(RustcEncodable)]
+#[derive(Clone, RustcEncodable)]
 pub struct FullLinkAnnotation {
     pub url: String,
 }
 to_json_for_encodable!(FullLinkAnnotation);
 
-#[derive(RustcEncodable)]
+#[derive(Clone, RustcEncodable)]
+pub struct FullStreetEasyAnnotation {
+    pub price_usd: i32,
+}
+
+#[derive(Clone, RustcEncodable)]
 pub struct FullItem {
     pub id: i64,
     pub name: String,
     pub description: String,
 
     pub link_annotations: Vec<FullLinkAnnotation>,
+    pub streeteasy_annotations: Vec<FullStreetEasyAnnotation>,
 }
 to_json_for_encodable!(FullItem);
 
-#[derive(RustcEncodable)]
+#[derive(Clone, RustcEncodable)]
 pub struct FullList {
     pub name: String,
     pub items: Vec<FullItem>,

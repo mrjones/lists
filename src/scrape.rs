@@ -66,12 +66,12 @@ impl HyperHttpClient {
 }
 
 pub struct Scraper {
-    client: std::sync::Arc<std::sync::Mutex<HttpClient>>,
+    client: std::sync::Arc<std::sync::Mutex<HttpClient + std::marker::Send>>,
     cache_dir: String,
 }
 
 impl Scraper {
-    pub fn new(client: std::sync::Arc<std::sync::Mutex<HttpClient>>,
+    pub fn new(client: std::sync::Arc<std::sync::Mutex<HttpClient + std::marker::Send>>,
                cache_dir: &str) -> Scraper {
         std::fs::create_dir_all(cache_dir).unwrap();
         return Scraper{
@@ -101,7 +101,7 @@ impl Scraper {
             maybe_age.unwrap() < std::time::Duration::new(60 * 60, 0);
     }
     
-    pub fn fetch(&mut self, url: &str) -> ListsResult<String> {
+    pub fn fetch(&self, url: &str) -> ListsResult<String> {
         let cache_filename = self.cache_filename(url);
 
         if self.has_recent_cache(&cache_filename) {
@@ -157,7 +157,7 @@ mod tests {
         populate_pages(client.lock().unwrap().deref_mut());
 
         {
-            let mut scraper = super::Scraper::new(client.clone(), CACHE_DIR);
+            let scraper = super::Scraper::new(client.clone(), CACHE_DIR);
             assert_eq!("It's google!".to_string(),
                        scraper.fetch("http://www.google.com").unwrap());
         }
@@ -172,7 +172,7 @@ mod tests {
         populate_pages(client.lock().unwrap().deref_mut());
 
         {
-            let mut scraper = super::Scraper::new(client.clone(), CACHE_DIR);
+            let scraper = super::Scraper::new(client.clone(), CACHE_DIR);
 
             assert_eq!("It's google!".to_string(),
                        scraper.fetch("http://www.google.com").unwrap());

@@ -15,7 +15,7 @@ pub struct StreetEasyClient {
 }
 
 pub struct ListingData {
-    price_usd: i32,
+    pub price_usd: i32,
 }
 
 impl StreetEasyClient {
@@ -29,10 +29,8 @@ impl StreetEasyClient {
         }
     }
 
-    pub fn lookup_listing(&mut self, sale_id: &str) -> ListsResult<ListingData> {
-        let url = format!("http://streeteasy.com/sale/{}", sale_id);
+    pub fn lookup_listing(&self, url: &str) -> ListsResult<ListingData> {
         let page = try!(self.scraper.fetch(&url));
-
         let document = kuchiki::parse_html().one(page);
 
         let mut price = -1;
@@ -70,7 +68,7 @@ mod tests {
     #[test]
     fn parse_price() {
         let mut client = StreetEasyClient::new();
-        let listing = client.lookup_listing("1241009");
+        let listing = client.lookup_listing("http://streeteasy.com/sale/1241009");
         assert_eq!(2350000, listing.unwrap().price_usd);
     }
 }

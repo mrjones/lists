@@ -381,12 +381,14 @@ fn remove_list_user_handler(req: &mut iron::request::Request) -> iron::IronResul
 struct ServerContext {
 //    conn_pool: Box<mysql::Pool>,
     db: data::Db,
+    streeteasy: streeteasy::StreetEasyClient,
 }
 
 impl ServerContext {
     fn new(conn_pool: mysql::Pool) -> ServerContext {
         return ServerContext {
             db: data::Db{conn: Box::new(conn_pool)},
+            streeteasy: streeteasy::StreetEasyClient::new(),
         }
     }
 }
@@ -410,9 +412,28 @@ fn all_lists(server_context: &ServerContext, user: &User, _: rustful::Context) -
     return Ok(Box::new(try!(server_context.db.fetch_all_lists(user))));
 }
 
+fn process_list(list: &mut FullList, se_client: &streeteasy::StreetEasyClient) {
+    for item in &mut list.items {
+        item.streeteasy_annotations = item.link_annotations.iter().filter_map(|link| {
+            if !link.url.contains("streeteasy.com") {
+                return None;
+            }
+            let listing_result = se_client.lookup_listing(&link.url);
+            return match listing_result {
+                Ok(listing) => Some(model::FullStreetEasyAnnotation{
+                    price_usd: listing.price_usd,
+                }),
+                Err(_) => None,
+            };
+        }).collect();
+    }
+}
+
 fn one_list(server_context: &ServerContext, _: &User, context: rustful::Context) -> ListsResult<Box<ToJson>> {
     let list_id = try!(lookup_param::<i64>("list_id", &context));
-    return Ok(Box::new(try!(server_context.db.lookup_list(list_id))));
+    let mut list = try!(server_context.db.lookup_list(list_id));
+    process_list(&mut list, &server_context.streeteasy);
+    return Ok(Box::new(list));
 }
 
 fn list_accessors(server_context: &ServerContext, _: &User, context: rustful::Context) -> ListsResult<Box<ToJson>> {
@@ -496,6 +517,7 @@ fn add_item(server_context: &ServerContext, _: &User, mut context: rustful::Cont
         name: db_item.name,
         description: db_item.description,
         link_annotations: vec![],
+        streeteasy_annotations: vec![],
     }));
 }
 

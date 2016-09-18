@@ -54,6 +54,7 @@ var ListItem = React.createClass({
       addingLinkAnnotation: false,
       pendingLinkAnnotation: '',
       linkAnnotations: this.props.data.link_annotations,
+      streetEasyAnnotations: this.props.data.streeteasy_annotations,
     };
   },
   delete: function() {
@@ -99,6 +100,14 @@ var ListItem = React.createClass({
       )
     });
 
+    var streetEasyNodes = this.state.streetEasyAnnotations.map(function(listing) {
+      return (
+        <div>
+          Price: ${listing.price_usd}
+        </div>
+      );
+    });
+
     var editNodes;
     if (this.state.addingLinkAnnotation) {
       editNodes =
@@ -119,6 +128,7 @@ var ListItem = React.createClass({
         </div>
         <div className="description">{this.props.data.description}</div>
         {linkNodes}
+        {streetEasyNodes}
         {editNodes}
       </li>
     );

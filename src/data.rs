@@ -79,6 +79,7 @@ impl Db {
                 name: db_item.name,
                 description: db_item.description,
                 link_annotations: vec![],
+                streeteasy_annotations: vec![],
             });
         }
         
