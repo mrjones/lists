@@ -5,7 +5,6 @@ authors = ["Matt Jones <jonesmr@gmail.com>"]
 
 [dependencies]
 handlebars-iron = "*"
-html5ever = "*"
 hyper = "*"
 iron = "*"
 kuchiki = "*"

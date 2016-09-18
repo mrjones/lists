@@ -61,26 +61,6 @@ impl StreetEasyClient {
             price_usd: price,
         });
     }
-        /*
-        html5ever::parse_document(
-            html5ever::rcdom::RcDom::default(),
-            std::default::Default::default())
-            .from_utf8()
-            .read_from(page)
-            .unwrap();
-
-        
-        
-        return ListingData{price_usd: 1};
-    }
-
-    fn walk_page(handle: html5ever::rcdom::Handle) -> ListingData {
-        let node = handle.borrow();
-        match node.node {
-            
-        }
-    }
-*/
 }
 
 #[cfg(test)]
