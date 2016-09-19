@@ -116,9 +116,17 @@ to_json_for_encodable!(AnnotatedItem);
 
 #[derive(Clone, RustcEncodable)]
 pub struct FullLinkAnnotation {
+    pub id: i64,
     pub url: String,
 }
 to_json_for_encodable!(FullLinkAnnotation);
+
+#[derive(Clone, RustcEncodable)]
+pub struct FullTextAnnotation {
+    pub id: i64,
+    pub text: String,
+}
+to_json_for_encodable!(FullTextAnnotation);
 
 #[derive(Clone, RustcEncodable)]
 pub struct FullStreetEasyAnnotation {
@@ -135,6 +143,7 @@ pub struct FullItem {
 
     pub link_annotations: Vec<FullLinkAnnotation>,
     pub streeteasy_annotations: Vec<FullStreetEasyAnnotation>,
+    pub text_annotations: Vec<FullTextAnnotation>,
 }
 to_json_for_encodable!(FullItem);
 

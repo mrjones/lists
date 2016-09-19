@@ -17,7 +17,6 @@ use result::ListsError;
 use result::ListsResult;
 use std::hash::Hash;
 use std::hash::Hasher;
-use std::hash::SipHasher;
 
 struct ServerContext {
 //    conn_pool: Box<mysql::Pool>,
@@ -169,6 +168,7 @@ fn add_item(server_context: &ServerContext, _: &User, mut context: rustful::Cont
         description: db_item.description,
         link_annotations: vec![],
         streeteasy_annotations: vec![],
+        text_annotations: vec![],
     }));
 }
 

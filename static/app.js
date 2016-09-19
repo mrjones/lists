@@ -56,12 +56,43 @@ var ListItem = React.createClass({
     return {
       addingLinkAnnotation: false,
       pendingLinkAnnotation: '',
+      addingTextAnnotations: false,
+      pendingTextAnnotation: '',
       linkAnnotations: itemData.link_annotations,
       streetEasyAnnotations: itemData.streeteasy_annotations,
+      textAnnotations: itemData.text_annotations,
     };
   },
   delete: function() {
     this.props.deleteFn(this.props.data.id);
+  },
+  postAnnotation: function(annotationObj) {
+    var url = `/lists/${this.props.userId}/list/${this.props.listId}/items/${this.props.data.id}/annotations`;
+
+    $.ajax({
+      url: url,
+      dataType: 'json',
+      type: 'POST',
+      data: JSON.stringify(annotationObj),
+      success: function(data) {
+        console.log("posted new annotation. got respnse: " + JSON.stringify(data));
+        this.setState(this.stateForItem(data));
+      }.bind(this),
+      error: function(xhr, status, err) {
+        console.error(url, status, err.toString());
+      }.bind(this),
+    });
+  },
+  toggleTextAnnotationAdder: function() {
+    this.setState({addingTextAnnotation: !this.state.addingTextAnnotation});
+  },
+  pendingTextAnnotationChanged: function(e) {
+    this.setState({pendingTextAnnotation: e.target.value});
+  },
+  addTextAnnotation: function() {
+    // TODO: The "TEXT" string should live on the server
+    this.postAnnotation({kind: "TEXT", body: this.state.pendingTextAnnotation});
+    this.setState({addingLinkAnnotation: false, pendingLinkAnnotation: ''});
   },
   toggleLinkAnnotationAdder: function() {
     this.setState({addingLinkAnnotation: !this.state.addingLinkAnnotation});
@@ -71,24 +102,7 @@ var ListItem = React.createClass({
   },
   addLinkAnnotation: function() {
     // TODO: The "link" string should live on the server
-    var annotation = {kind: "LINK", body: this.state.pendingLinkAnnotation};
-    var url = `/lists/${this.props.userId}/list/${this.props.listId}/items/${this.props.data.id}/annotations`;
-
-    console.log("POST(" + url + "): " + JSON.stringify(annotation));
-    $.ajax({
-      url: url,
-      dataType: 'json',
-      type: 'POST',
-      data: JSON.stringify(annotation),
-      success: function(data) {
-        console.log("posted new annotation. got respnse: " + JSON.stringify(data));
-        // TODO: this assumes too much about the server objects and should live there
-        this.setState(this.stateForItem(data));
-      }.bind(this),
-      error: function(xhr, status, err) {
-        console.error(url, status, err.toString());
-      }.bind(this),
-    });
+    this.postAnnotation({kind: "LINK", body: this.state.pendingLinkAnnotation});
     this.setState({addingLinkAnnotation: false, pendingLinkAnnotation: ''});
   },
   render: function() {
@@ -108,12 +122,29 @@ var ListItem = React.createClass({
       );
     });
 
-    var editNodes;
+    var textNodes = this.state.textAnnotations.map(function(text) {
+      return (
+        <div key={text.id}>
+          {text.text}
+        </div>
+      );
+    });
+
+    var addLinkNodes;
     if (this.state.addingLinkAnnotation) {
-      editNodes =
+      addLinkNodes =
         <div>
           <input type="text" placeholder="Url..." value={this.state.pendingLinkAnnotation} onChange={this.pendingLinkAnnotationChanged}/>
           <button onClick={this.addLinkAnnotation}>+</button>
+        </div>;
+    }
+
+    var addTextNodes;
+    if (this.state.addingTextAnnotation) {
+      addTextNodes =
+        <div>
+          <input type="text" placeholder="Text..." value={this.state.pendingTextAnnotation} onChange={this.pendingTextAnnotationChanged}/>
+          <button onClick={this.addTextAnnotation}>+</button>
         </div>;
     }
 
@@ -125,11 +156,16 @@ var ListItem = React.createClass({
           <button onClick={this.toggleLinkAnnotationAdder}>
             {this.state.addingLinkAnnotation ? "-URL" : "+URL"}
           </button>
+          <button onClick={this.toggleTextAnnotationAdder}>
+            {this.state.addingTextAnnotation ? "-Text" : "+Text"}
+          </button>
         </div>
         <div className="description">{this.props.data.description}</div>
         {linkNodes}
         {streetEasyNodes}
-        {editNodes}
+        {textNodes}
+        {addLinkNodes}
+        {addTextNodes}
       </li>
     );
   }
@@ -140,11 +176,9 @@ var AddItemWidget = React.createClass({
     return {name: '', description: ''};
   },
   handleNameChange: function(e) {
-    console.log("name changed to: " + e.target.value);
     this.setState({name: e.target.value});
   },
   handleDescriptionChange: function(e) {
-    console.log("desc changed to: " + e.target.value);
     this.setState({description: e.target.value});
   },
   handleSubmit: function(e) {

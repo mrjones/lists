@@ -5,6 +5,7 @@ use model::DbObject;
 use model::FullItem;
 use model::FullLinkAnnotation;
 use model::FullList;
+use model::FullTextAnnotation;
 use model::Annotation;
 use model::Item;
 use model::List;
@@ -61,6 +62,28 @@ impl Db {
         return extract_one(&mut result);
     }
 
+    fn append_annotation(item: &mut FullItem, db_annotation: &DbAnnotation) {
+        match db_annotation.kind.as_str() {
+            "LINK" => {
+                item.link_annotations.push(
+                    FullLinkAnnotation{
+                        url: db_annotation.body.clone(),
+                        id: db_annotation.id,
+                    }
+                );
+            },
+            "TEXT" => {
+                item.text_annotations.push(
+                    FullTextAnnotation{
+                        text: db_annotation.body.clone(),
+                        id: db_annotation.id,
+                    }
+                );
+            },
+            _ => println!("Ignoring annotation: {:?}", db_annotation),
+        }
+    }
+
     pub fn lookup_list(&self, list_id: i64) -> ListsResult<FullList> {
         let mut list_result = dbtry!(self.conn.prep_exec("SELECT id, name FROM lists.lists WHERE id = ?", (list_id,)));
         let list = try!(extract_one::<List>(&mut list_result));
@@ -80,6 +103,7 @@ impl Db {
                 description: db_item.description,
                 link_annotations: vec![],
                 streeteasy_annotations: vec![],
+                text_annotations: vec![],
             });
         }
         
@@ -88,10 +112,7 @@ impl Db {
                 &db_annotation.item_id, |item| item.id)
                 .expect("dangling annotation");
 
-            if db_annotation.kind == "LINK" {
-                full_items[index].link_annotations.push(
-                    FullLinkAnnotation{url: db_annotation.body});
-            }
+            Db::append_annotation(&mut full_items[index], &db_annotation);
         }
 
         return Ok(FullList {
@@ -99,7 +120,7 @@ impl Db {
             items: full_items,
         });
     }
-
+    
     pub fn lookup_list_item(&self, list_id: i64, item_id: i64) -> ListsResult<FullItem> {
         let mut item_result =
             dbtry!(self.conn.prep_exec("SELECT id, name, description FROM lists.items WHERE list_id = ? AND id = ?", (list_id, item_id)));
@@ -114,13 +135,11 @@ impl Db {
             description: db_item.description,
             link_annotations: vec![],
             streeteasy_annotations: vec![],
+            text_annotations: vec![],
         };
     
         for db_annotation in db_annotations {
-            if db_annotation.kind == "LINK" {
-                item.link_annotations.push(
-                    FullLinkAnnotation{url: db_annotation.body});
-            }
+            Db::append_annotation(&mut item, &db_annotation);
         }
 
         return Ok(item);
