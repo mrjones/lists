@@ -102,7 +102,7 @@ var ListItem = React.createClass({
 
     var streetEasyNodes = this.state.streetEasyAnnotations.map(function(listing) {
       return (
-        <div>
+        <div key={listing.hash}>
           Price: ${listing.price_usd}
         </div>
       );

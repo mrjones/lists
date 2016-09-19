@@ -122,7 +122,9 @@ to_json_for_encodable!(FullLinkAnnotation);
 
 #[derive(Clone, RustcEncodable)]
 pub struct FullStreetEasyAnnotation {
+    pub hash: u64,
     pub price_usd: i32,
+    pub name: String,
 }
 
 #[derive(Clone, RustcEncodable)]

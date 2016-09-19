@@ -15,6 +15,9 @@ mod streeteasy;
 use model::*;
 use result::ListsError;
 use result::ListsResult;
+use std::hash::Hash;
+use std::hash::Hasher;
+use std::hash::SipHasher;
 
 struct ServerContext {
 //    conn_pool: Box<mysql::Pool>,
@@ -63,9 +66,15 @@ fn expand_item_annotations(item: &mut FullItem, se_client: &streeteasy::StreetEa
         }
         let listing_result = se_client.lookup_listing(&link.url);
         return match listing_result {
-            Ok(listing) => Some(model::FullStreetEasyAnnotation{
-                price_usd: listing.price_usd,
-            }),
+            Ok(listing) => {
+                let mut hasher = std::hash::SipHasher::new();
+                listing.name.hash(&mut hasher);
+                return Some(model::FullStreetEasyAnnotation{
+                    price_usd: listing.price_usd,
+                    name: listing.name,
+                    hash: hasher.finish(),
+                })
+            },
             Err(_) => None,
         };
     }).collect();

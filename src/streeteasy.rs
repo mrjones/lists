@@ -15,6 +15,7 @@ pub struct StreetEasyClient {
 }
 
 pub struct ListingData {
+    pub name: String,
     pub price_usd: i32,
 }
 
@@ -34,8 +35,20 @@ impl StreetEasyClient {
         let document = kuchiki::parse_html().one(page);
 
         let mut price = -1;
+        let mut name = String::new();
         
         // element: kuchiki::NodeDataRef
+        for element in document.select(".building-title a").unwrap() {
+            let node: &kuchiki::NodeRef = element.as_node();
+            for child in node.children() {
+                match child.data() {
+                    &kuchiki::NodeData::Text(ref val) => {
+                        name.push_str(val.borrow().deref());
+                    }
+                    _ => (),
+                }
+            }
+        }
         for element in document.select(".details_info_price .price").unwrap() {
             let node: &kuchiki::NodeRef = element.as_node();
             for child in node.children() {
@@ -57,6 +70,7 @@ impl StreetEasyClient {
 
         return Ok(ListingData{
             price_usd: price,
+            name: name,
         });
     }
 }
