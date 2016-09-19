@@ -65,7 +65,7 @@ impl Scraper {
     fn has_recent_cache(&self, cache_filename: &std::path::Path) -> bool {
         let maybe_age = Scraper::get_age(cache_filename);
         return maybe_age.is_ok() &&
-            maybe_age.unwrap() < std::time::Duration::new(60 * 60, 0);
+            maybe_age.unwrap() < std::time::Duration::new(24 * 60 * 60, 0);
     }
     
     pub fn fetch(&self, url: &str) -> ListsResult<String> {

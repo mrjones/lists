@@ -50,11 +50,14 @@ var App = React.createClass({
 
 var ListItem = React.createClass({
   getInitialState: function() {
+    return this.stateForItem(this.props.data);
+  },
+  stateForItem: function(itemData) {
     return {
       addingLinkAnnotation: false,
       pendingLinkAnnotation: '',
-      linkAnnotations: this.props.data.link_annotations,
-      streetEasyAnnotations: this.props.data.streeteasy_annotations,
+      linkAnnotations: itemData.link_annotations,
+      streetEasyAnnotations: itemData.streeteasy_annotations,
     };
   },
   delete: function() {
@@ -72,7 +75,6 @@ var ListItem = React.createClass({
     var url = `/lists/${this.props.userId}/list/${this.props.listId}/items/${this.props.data.id}/annotations`;
 
     console.log("POST(" + url + "): " + JSON.stringify(annotation));
-      
     $.ajax({
       url: url,
       dataType: 'json',
@@ -81,9 +83,7 @@ var ListItem = React.createClass({
       success: function(data) {
         console.log("posted new annotation. got respnse: " + JSON.stringify(data));
         // TODO: this assumes too much about the server objects and should live there
-        this.setState({linkAnnotations: this.state.linkAnnotations.concat(
-          [{url: data.body}]
-        )});
+        this.setState(this.stateForItem(data));
       }.bind(this),
       error: function(xhr, status, err) {
         console.error(url, status, err.toString());

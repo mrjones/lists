@@ -50,27 +50,31 @@ fn all_lists(server_context: &ServerContext, user: &User, _: rustful::Context) -
     return Ok(Box::new(try!(server_context.db.fetch_all_lists(user))));
 }
 
-fn process_list(list: &mut FullList, se_client: &streeteasy::StreetEasyClient) {
-    for item in &mut list.items {
-        item.streeteasy_annotations = item.link_annotations.iter().filter_map(|link| {
-            if !link.url.contains("streeteasy.com") {
-                return None;
-            }
-            let listing_result = se_client.lookup_listing(&link.url);
-            return match listing_result {
-                Ok(listing) => Some(model::FullStreetEasyAnnotation{
-                    price_usd: listing.price_usd,
-                }),
-                Err(_) => None,
-            };
-        }).collect();
+fn expand_list_annotations(list: &mut FullList, se_client: &streeteasy::StreetEasyClient) {
+    for mut item in &mut list.items {
+        expand_item_annotations(&mut item, se_client);
     }
+}
+
+fn expand_item_annotations(item: &mut FullItem, se_client: &streeteasy::StreetEasyClient) {
+    item.streeteasy_annotations = item.link_annotations.iter().filter_map(|link| {
+        if !link.url.contains("streeteasy.com") {
+            return None;
+        }
+        let listing_result = se_client.lookup_listing(&link.url);
+        return match listing_result {
+            Ok(listing) => Some(model::FullStreetEasyAnnotation{
+                price_usd: listing.price_usd,
+            }),
+            Err(_) => None,
+        };
+    }).collect();
 }
 
 fn one_list(server_context: &ServerContext, _: &User, context: rustful::Context) -> ListsResult<Box<ToJson>> {
     let list_id = try!(lookup_param::<i64>("list_id", &context));
     let mut list = try!(server_context.db.lookup_list(list_id));
-    process_list(&mut list, &server_context.streeteasy);
+    expand_list_annotations(&mut list, &server_context.streeteasy);
     return Ok(Box::new(list));
 }
 
@@ -171,9 +175,15 @@ fn add_annotation(server_context: &ServerContext, _: &User, mut context: rustful
     println!("add_annotation :: they posted: {:?}", annotation);
 
     // TODO: lift out a level?
+    let list_id = try!(lookup_param::<i64>("list_id", &context));
     let item_id = try!(lookup_param::<i64>("item_id", &context));
     // TODO: check item belongs to list and user has permission
-    return Ok(Box::new(try!(server_context.db.add_annotation(item_id, &annotation.kind, &annotation.body))));
+    try!(server_context.db.add_annotation(item_id, &annotation.kind, &annotation.body));
+
+    let mut item = try!(server_context.db.lookup_list_item(list_id, item_id));
+    expand_item_annotations(&mut item, &server_context.streeteasy);
+    
+    return Ok(Box::new(item));
 }
 
 enum Api {

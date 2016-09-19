@@ -83,7 +83,6 @@ impl Db {
             });
         }
         
-
         for db_annotation in db_annotations {
             let index = full_items.binary_search_by_key(
                 &db_annotation.item_id, |item| item.id)
@@ -99,6 +98,32 @@ impl Db {
             name: list.name,
             items: full_items,
         });
+    }
+
+    pub fn lookup_list_item(&self, list_id: i64, item_id: i64) -> ListsResult<FullItem> {
+        let mut item_result =
+            dbtry!(self.conn.prep_exec("SELECT id, name, description FROM lists.items WHERE list_id = ? AND id = ?", (list_id, item_id)));
+        let db_item = try!(extract_one::<DbItem>(&mut item_result));
+
+        let db_annotations = try!(to_vec::<DbAnnotation>(
+            dbtry!(self.conn.prep_exec("SELECT lists.item_annotations.id, lists.items.id, lists.item_annotations.kind, lists.item_annotations.body FROM lists.items JOIN lists.item_annotations ON lists.items.id = lists.item_annotations.item_id WHERE lists.items.list_id = ? AND lists.items.id = ?", (list_id,item_id)))));
+
+        let mut item = FullItem{
+            id: db_item.id,
+            name: db_item.name,
+            description: db_item.description,
+            link_annotations: vec![],
+            streeteasy_annotations: vec![],
+        };
+    
+        for db_annotation in db_annotations {
+            if db_annotation.kind == "LINK" {
+                item.link_annotations.push(
+                    FullLinkAnnotation{url: db_annotation.body});
+            }
+        }
+
+        return Ok(item);
     }
 
     pub fn fetch_list_accessors(&self, list_id: i64) -> ListsResult<Vec<User>> {
@@ -138,6 +163,7 @@ impl Db {
     }
     
     pub fn delete_item(&self, item_id: i64) -> ListsResult<()> {
+        let _ = dbtry!(self.conn.prep_exec("DELETE FROM lists.item_annotations WHERE item_id = ?", (item_id,)));
         let _ = dbtry!(self.conn.prep_exec("DELETE FROM lists.items WHERE id = ?", (item_id,)));
         return Ok(());
     }
