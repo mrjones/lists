@@ -10,39 +10,6 @@ pub trait HttpClient {
     fn get(&mut self, url: &str) -> ListsResult<String>;
 }
 
-struct FakeHttpClient {
-    pages: std::collections::HashMap<String, String>,
-    fetches: i32,
-}
-
-impl HttpClient for FakeHttpClient {
-    fn get(&mut self, url: &str) -> ListsResult<String> {
-        self.fetches = self.fetches + 1;
-        match self.pages.get(url) {
-            Some(body) => Ok(body.clone()),
-            None => Err(ListsError::DoesNotExist),
-        }
-    }
-}
-
-impl FakeHttpClient {
-    fn new() -> FakeHttpClient {
-        return FakeHttpClient{
-            pages: std::collections::HashMap::new(),
-            fetches: 0,
-        }
-    }
-    
-    fn add_page(&mut self, url: String, body: String) {
-        self.pages.insert(url, body);
-    }
-
-    fn fetch_count(&self) -> i32 {
-        return self.fetches;
-    }
-}
-
-
 pub struct HyperHttpClient {
     client: hyper::client::Client,
 }
@@ -182,5 +149,37 @@ mod tests {
         }
 
         assert_eq!(1, client.lock().unwrap().fetch_count());
+    }
+
+    struct FakeHttpClient {
+        pages: std::collections::HashMap<String, String>,
+        fetches: i32,
+    }
+
+    impl HttpClient for FakeHttpClient {
+        fn get(&mut self, url: &str) -> ListsResult<String> {
+            self.fetches = self.fetches + 1;
+            match self.pages.get(url) {
+                Some(body) => Ok(body.clone()),
+                None => Err(ListsError::DoesNotExist),
+            }
+        }
+    }
+
+    impl FakeHttpClient {
+        fn new() -> FakeHttpClient {
+            return FakeHttpClient{
+                pages: std::collections::HashMap::new(),
+                fetches: 0,
+            }
+        }
+    
+        fn add_page(&mut self, url: String, body: String) {
+            self.pages.insert(url, body);
+        }
+
+        fn fetch_count(&self) -> i32 {
+            return self.fetches;
+        }
     }
 }

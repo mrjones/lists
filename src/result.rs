@@ -9,8 +9,6 @@ pub enum ListsError {
     MissingParam(String),
     InvalidParam,
     DatabaseError(mysql::Error),
-    DoesNotExist,
-    InconsistentDatabase(String),
     IoError(std::io::Error),
     HyperError(hyper::error::Error),  // This seems wrong
     
@@ -29,14 +27,8 @@ impl std::fmt::Display for ListsError {
             ListsError::DatabaseError(ref err) => {
                 try!(write!(f, "Database Error: {}", err));
             }
-            ListsError::DoesNotExist => {
-                try!(write!(f, "Does Not Exist"));
-            },
             ListsError::Unknown(ref more) => {
                 try!(write!(f, "Unknown Error: {}", more));
-            },
-            ListsError::InconsistentDatabase(ref more) => {
-                try!(write!(f, "Inconsistent Dababase: {}", more));
             },
             ListsError::IoError(ref err) => {
                 try!(write!(f, "IO Error: {}", err));
@@ -56,9 +48,7 @@ impl std::error::Error for ListsError {
             ListsError::MissingParam(_) => "MissingParam", 
             ListsError::InvalidParam => "InvalidParam",
             ListsError::DatabaseError(_) => "DatabaseError",
-            ListsError::DoesNotExist => "DoesNotExist",
             ListsError::Unknown(_) => "Unknown",
-            ListsError::InconsistentDatabase(_) => "InconsistentDababase",
             ListsError::IoError(_) => "IoError",
             ListsError::HyperError(_) => "HttpError",
         }

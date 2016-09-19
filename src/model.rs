@@ -114,35 +114,6 @@ pub struct AnnotatedItem {
 }
 to_json_for_encodable!(AnnotatedItem);
 
-#[derive(RustcEncodable)]
-pub struct ListPage<'a> {
-    pub id: i64,
-    pub items: Vec<ListPageItem<'a>>,
-
-    pub owner: &'a User,
-    pub accessors: &'a Vec<User>,
-    pub all_users: &'a Vec<User>,
-}
-impl<'a> ToJson for ListPage<'a> {
-    fn to_json(&self) -> Json {
-      return to_json(self);
-    }
-}
-
-#[derive(RustcEncodable)]
-pub struct ListPageItem<'a> {
-    pub id: i64,
-    pub name: &'a str,
-    pub description: &'a str,
-
-    pub link_annotations: Vec<LinkAnnotation<'a>>,
-}
-
-#[derive(RustcEncodable)]
-pub struct LinkAnnotation<'a> {
-    pub url: &'a str,
-}
-
 #[derive(Clone, RustcEncodable)]
 pub struct FullLinkAnnotation {
     pub url: String,
