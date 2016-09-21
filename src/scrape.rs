@@ -49,7 +49,8 @@ impl Scraper {
 
     fn cache_filename(&self, url: &str) -> std::path::PathBuf {
         let mut path = std::path::PathBuf::from(self.cache_dir.clone());
-        path.push(url.to_string().replace("/", "_").replace(".", "_"));
+        path.push(format!("httpcache_{}",
+                          url.to_string().replace("/", "_").replace(".", "_")));
         return path;
     }
 

@@ -1,5 +1,6 @@
 extern crate hyper;
 extern crate mysql;
+extern crate rustc_serialize;
 extern crate std;
 
 pub type ListsResult<T> = Result<T, ListsError>;
@@ -11,6 +12,8 @@ pub enum ListsError {
     DatabaseError(mysql::Error),
     IoError(std::io::Error),
     HyperError(hyper::error::Error),  // This seems wrong
+    DoesNotExist,
+    JsonError(rustc_serialize::json::DecoderError),
     
     Unknown(String),
 }
@@ -35,7 +38,14 @@ impl std::fmt::Display for ListsError {
             },
             ListsError::HyperError(ref err) => {
                 try!(write!(f, "HTTP Error: {}", err));
+            },
+            ListsError::DoesNotExist => {
+                try!(write!(f, "Does not exist"));
+            },
+            ListsError::JsonError(ref err) => {
+                try!(write!(f, "Json Error: {}", err));
             }
+
         }
 
         return Ok(());
@@ -51,6 +61,8 @@ impl std::error::Error for ListsError {
             ListsError::Unknown(_) => "Unknown",
             ListsError::IoError(_) => "IoError",
             ListsError::HyperError(_) => "HttpError",
+            ListsError::DoesNotExist => "DoesNotExist",
+            ListsError::JsonError(_) => "JsonError",
         }
     }
 
@@ -73,6 +85,13 @@ impl std::convert::From<hyper::error::Error> for ListsError {
         return ListsError::HyperError(err);
     }
 }
+
+impl std::convert::From<rustc_serialize::json::DecoderError> for ListsError {
+    fn from(err: rustc_serialize::json::DecoderError) -> ListsError {
+        return ListsError::JsonError(err);
+    }
+}
+
 
 //impl std::fmt::Display for ListsError {
 //    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
