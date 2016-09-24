@@ -95,10 +95,11 @@ mod tests {
     extern crate std;
     
     use super::HttpClient;
-    use super::FakeHttpClient;
 
     use std::ops::DerefMut;
-
+    use result::ListsError;
+    use result::ListsResult;
+    
     const CACHE_DIR: &'static str = "/tmp/scrapecache/";
     
     fn populate_pages(client: &mut FakeHttpClient) {

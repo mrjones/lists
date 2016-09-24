@@ -6,6 +6,7 @@ extern crate url;
 
 use rustc_serialize::json::ToJson;
 
+mod cache;
 mod data;
 mod model;
 mod result;
