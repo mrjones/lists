@@ -96,7 +96,6 @@ impl Cache for FileCache {
 
     fn put(&mut self, namespace: &str, key: &str, value: &str, expiration: ExpirationPolicy) -> ListsResult<()> {
         let cache_filename = self.cache_filename(namespace, key);
-        println!("Putting to: {:?}", cache_filename);
         let mut file = try!(std::fs::File::create(cache_filename));
         try!(file.write_all(value.as_bytes()));
 
