@@ -1,3 +1,4 @@
+extern crate rustc_serialize;
 extern crate std;
 
 use result::ListsError;
@@ -20,21 +21,28 @@ pub enum ExpirationPolicy {
 }
 
 trait Clock {
-    fn now(&self) -> std::time::Instant;
+    fn now(&self) -> std::time::SystemTime;
 }
 
 struct RealClock;
 impl Clock for RealClock {
-    fn now(&self) -> std::time::Instant {
-        return std::time::Instant::now();
+    fn now(&self) -> std::time::SystemTime {
+        return std::time::SystemTime::now();
     }
 }
 
 struct FakeClock {
-    time: std::time::Instant,
+    time: std::time::SystemTime,
+}
+impl FakeClock {
+    fn new() -> FakeClock {
+        return FakeClock{
+            time: std::time::SystemTime::now(),
+        };
+    }
 }
 impl Clock for FakeClock {
-    fn now(&self) -> std::time::Instant {
+    fn now(&self) -> std::time::SystemTime {
         return self.time;
     }
 }
@@ -42,6 +50,13 @@ impl Clock for FakeClock {
 //
 // FileCache
 //
+
+#[derive(RustcEncodable, RustcDecodable)]
+struct FileCacheOnDiskFormat {
+    value: String,
+    has_expiration_time: bool,
+    expiration_time_seconds: u64,
+}
 
 pub struct FileCache {
     cache_dir: std::path::PathBuf,
@@ -77,12 +92,25 @@ impl FileCache {
         if !cache_filename.exists() {
             return Err(ListsError::DoesNotExist);
         }
-
-        let mut file = try!(std::fs::File::open(cache_filename));
+        
+        let mut file = try!(std::fs::File::open(&cache_filename));
         let mut data = String::new();
         try!(file.read_to_string(&mut data));
 
-        return Ok(data);
+        let record : FileCacheOnDiskFormat =
+            try!(rustc_serialize::json::decode(&data));
+
+        if record.has_expiration_time {
+            let now = self.clock.lock().unwrap().now();
+            let expiration = std::time::UNIX_EPOCH +
+                std::time::Duration::from_secs(record.expiration_time_seconds);
+            if expiration < now {
+                std::fs::remove_file(&cache_filename).ok();
+                return Err(ListsError::DoesNotExist);
+            }
+        }
+        
+        return Ok(record.value);
     }
 }
 
@@ -97,7 +125,29 @@ impl Cache for FileCache {
     fn put(&mut self, namespace: &str, key: &str, value: &str, expiration: ExpirationPolicy) -> ListsResult<()> {
         let cache_filename = self.cache_filename(namespace, key);
         let mut file = try!(std::fs::File::create(cache_filename));
-        try!(file.write_all(value.as_bytes()));
+
+        let record = match expiration {
+            ExpirationPolicy::Never => FileCacheOnDiskFormat {
+                value: value.to_string(),
+                has_expiration_time: false,
+                expiration_time_seconds: 0,
+            },
+            ExpirationPolicy::After(duration) => {
+                let now = self.clock.lock().unwrap().now();
+                let expiration = now + duration;
+                let epoch_duration = try!(expiration.duration_since(
+                    std::time::UNIX_EPOCH));
+                
+                FileCacheOnDiskFormat {
+                    value: value.to_string(),
+                    has_expiration_time: true,
+                    expiration_time_seconds: epoch_duration.as_secs(),
+                }
+            },
+        };
+
+        let encoded : String = try!(rustc_serialize::json::encode(&record));
+        try!(file.write_all(encoded.as_bytes()));
 
         return Ok(());
     }
@@ -109,7 +159,7 @@ impl Cache for FileCache {
 
 struct MemoryCacheEntry {
     value: String,
-    expiration: Option<std::time::Instant>,
+    expiration: Option<std::time::SystemTime>,
 }
 
 pub struct MemoryCache {
@@ -132,7 +182,7 @@ impl MemoryCache {
         return format!("{}:{}", namespace, key);
     }
 
-    fn expiration(&self, expiration: ExpirationPolicy) -> Option<std::time::Instant> {
+    fn expiration(&self, expiration: ExpirationPolicy) -> Option<std::time::SystemTime> {
         match expiration {
             ExpirationPolicy::Never => return None,
             ExpirationPolicy::After(duration) => {
@@ -176,47 +226,96 @@ mod tests {
     extern crate std;
     
     use super::Cache;
+    use super::Clock;
     use super::FileCache;
     use super::ExpirationPolicy;
     use super::FakeClock;
     use super::MemoryCache;
     
     const CACHE_DIR: &'static str = "/tmp/cache.test/";
+    const MEMORY_LABEL: &'static str = "MEMORY_CACHE";
+    const FILE_LABEL: &'static str = "FILE_CACHE";
+    
+    struct CacheHandle {
+        cache: Box<Cache>,
+        clock: std::sync::Arc<std::sync::Mutex<FakeClock>>,
+        debug_label: &'static str,
+    }
 
-    #[test]
-    fn simple_put_get_memory() {
-        let mut cache = MemoryCache::new();
-        cache.put("ns", "key", "val", ExpirationPolicy::Never).unwrap();
-        assert_eq!("val".to_string(), cache.get("ns", "key").unwrap());
+    fn new_memory_cache() -> CacheHandle {
+        let clock = std::sync::Arc::new(std::sync::Mutex::new(FakeClock::new()));
+        return CacheHandle{
+            cache: Box::new(MemoryCache{
+                data: std::collections::HashMap::new(),
+                clock: clock.clone(),
+            }),
+            clock: clock,
+            debug_label: MEMORY_LABEL,
+        };
+    }
+
+    fn new_file_cache() -> CacheHandle {
+        let clock = std::sync::Arc::new(std::sync::Mutex::new(FakeClock::new()));
+        return CacheHandle{
+            cache: Box::new(FileCache{
+                cache_dir: std::path::PathBuf::from(CACHE_DIR),
+                clock: clock.clone(),
+            }),
+            clock: clock,
+            debug_label: FILE_LABEL,
+        }        
+    }
+
+    fn all_caches() -> std::vec::Vec<CacheHandle> {
+        return vec![new_memory_cache(), new_file_cache()];
     }
 
     #[test]
-    fn simple_put_get_file() {
-        let mut cache = FileCache::new(CACHE_DIR);
-        cache.put("ns", "key", "val", ExpirationPolicy::Never).unwrap();
-        assert_eq!("val".to_string(), cache.get("ns", "key").unwrap());
+    fn simple_put_get() {
+        for handle in &mut all_caches() {
+            println!("== {} ==", handle.debug_label);
+            let mut cache = &mut handle.cache;
+            cache.put("ns", "key", "val", ExpirationPolicy::Never)
+                .expect(handle.debug_label);
+            assert_eq!("val".to_string(),
+                       cache.get("ns", "key").expect(handle.debug_label));
+        }
+    }
+
+    #[test]
+    fn overwrite() {
+        for handle in &mut all_caches() {
+            println!("== {} ==", handle.debug_label);
+            let mut cache = &mut handle.cache;
+            cache.put("ns", "key", "val1", ExpirationPolicy::Never)
+                .expect(handle.debug_label);
+            cache.put("ns", "key", "val2", ExpirationPolicy::Never)
+                .expect(handle.debug_label);
+            assert_eq!("val2".to_string(),
+                       cache.get("ns", "key").expect(handle.debug_label));
+        }
     }
 
     #[test]
     fn time_based_expiration() {
-        let start_time = std::time::Instant::now();
-        let clock = std::sync::Arc::new(std::sync::Mutex::new(
-            FakeClock{time: start_time}));
-        let mut cache = MemoryCache{
-            data: std::collections::HashMap::new(),
-            clock: clock.clone(),
-        };
+        for handle in &mut all_caches() {
+            println!("== {} ==", handle.debug_label);
+            let mut cache = &mut handle.cache;
+            let clock = &mut handle.clock;
+            let start_time = clock.lock().unwrap().now();
 
-        let two_seconds = std::time::Duration::new(2, 0);
+            let two_seconds = std::time::Duration::new(2, 0);
         
-        cache.put("ns", "key", "val", ExpirationPolicy::After(two_seconds)).unwrap();
+            cache.put("ns", "key", "val", ExpirationPolicy::After(two_seconds)).unwrap();
 
-        clock.lock().unwrap().time =
-            start_time + std::time::Duration::new(1, 0);
-        assert_eq!("val".to_string(), cache.get("ns", "key").unwrap());
+            clock.lock().unwrap().time =
+                start_time + std::time::Duration::new(1, 0);
+            assert_eq!("val".to_string(), cache.get("ns", "key").unwrap());
 
-        clock.lock().unwrap().time =
-            start_time + std::time::Duration::new(3, 0);
-        assert_eq!(None, cache.get("ns", "key"));
+            clock.lock().unwrap().time =
+                start_time + std::time::Duration::new(3, 0);
+            assert_eq!(None, cache.get("ns", "key"),
+                       "{}: Should have expired item.", handle.debug_label);
+        }
     }
 }

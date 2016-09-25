@@ -13,7 +13,9 @@ pub enum ListsError {
     IoError(std::io::Error),
     HyperError(hyper::error::Error),  // This seems wrong
     DoesNotExist,
-    JsonError(rustc_serialize::json::DecoderError),
+    JsonDecodeError(rustc_serialize::json::DecoderError),
+    JsonEncodeError(rustc_serialize::json::EncoderError),
+    SystemTimeError(std::time::SystemTimeError),
     
     Unknown(String),
 }
@@ -42,8 +44,14 @@ impl std::fmt::Display for ListsError {
             ListsError::DoesNotExist => {
                 try!(write!(f, "Does not exist"));
             },
-            ListsError::JsonError(ref err) => {
-                try!(write!(f, "Json Error: {}", err));
+            ListsError::JsonDecodeError(ref err) => {
+                try!(write!(f, "Json Decode Error: {}", err));
+            },
+            ListsError::JsonEncodeError(ref err) => {
+                try!(write!(f, "Json Encode Error: {}", err));
+            },
+            ListsError::SystemTimeError(ref err) => {
+                try!(write!(f, "SystemTime Error: {}", err));
             }
 
         }
@@ -62,7 +70,9 @@ impl std::error::Error for ListsError {
             ListsError::IoError(_) => "IoError",
             ListsError::HyperError(_) => "HttpError",
             ListsError::DoesNotExist => "DoesNotExist",
-            ListsError::JsonError(_) => "JsonError",
+            ListsError::JsonDecodeError(_) => "JsonDecodeError",
+            ListsError::JsonEncodeError(_) => "JsonEncodeError",
+            ListsError::SystemTimeError(_) => "SystemTimeError",
         }
     }
 
@@ -88,7 +98,20 @@ impl std::convert::From<hyper::error::Error> for ListsError {
 
 impl std::convert::From<rustc_serialize::json::DecoderError> for ListsError {
     fn from(err: rustc_serialize::json::DecoderError) -> ListsError {
-        return ListsError::JsonError(err);
+        return ListsError::JsonDecodeError(err);
+    }
+}
+
+impl std::convert::From<rustc_serialize::json::EncoderError> for ListsError {
+    fn from(err: rustc_serialize::json::EncoderError) -> ListsError {
+        return ListsError::JsonEncodeError(err);
+    }
+}
+
+
+impl std::convert::From<std::time::SystemTimeError> for ListsError {
+    fn from(err: std::time::SystemTimeError) -> ListsError {
+        return ListsError::SystemTimeError(err);
     }
 }
 
