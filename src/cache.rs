@@ -60,7 +60,7 @@ struct FileCacheOnDiskFormat {
 
 pub struct FileCache {
     cache_dir: std::path::PathBuf,
-    clock: std::sync::Arc<std::sync::Mutex<Clock>>,
+    clock: std::sync::Arc<std::sync::Mutex<Clock + std::marker::Send>>,
 }
 
 impl FileCache {

@@ -4,6 +4,7 @@ extern crate rustc_serialize;
 extern crate std;
 
 use self::kuchiki::traits::TendrilSink;
+use cache::FileCache;
 use result::ListsError;
 use result::ListsResult;
 use scrape::HyperHttpClient;
@@ -44,7 +45,7 @@ impl StreetEasyClient {
             scraper: Scraper::new(
                 std::sync::Arc::new(std::sync::Mutex::new(
                     HyperHttpClient::new())),
-                cache_dir.as_str()),
+                Box::new(FileCache::new(&cache_dir))),
             cache_dir: cache_dir,
             price_regex: regex::Regex::new("(\\$[0-9,]+)").unwrap(),
         }
@@ -77,7 +78,7 @@ impl StreetEasyClient {
         return Ok(());
     }
     
-    pub fn lookup_listing(&self, url: &str) -> ListsResult<ListingData> {
+    pub fn lookup_listing(&mut self, url: &str) -> ListsResult<ListingData> {
         let cache_entry = self.listing_cache_lookup(url);
         if cache_entry.is_ok() {
             return cache_entry;

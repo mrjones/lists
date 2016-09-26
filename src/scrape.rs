@@ -1,10 +1,10 @@
 extern crate hyper;
 extern crate std;
 
-use result::ListsError;
+use cache::Cache;
+use cache::ExpirationPolicy;
 use result::ListsResult;
 use std::io::Read;
-use std::io::Write;
 
 pub trait HttpClient {
     fn get(&mut self, url: &str) -> ListsResult<String>;
@@ -32,60 +32,33 @@ impl HyperHttpClient {
     }
 }
 
+const CACHE_NAMESPACE: &'static str = "scraper";
+
 pub struct Scraper {
     client: std::sync::Arc<std::sync::Mutex<HttpClient + std::marker::Send>>,
-    cache_dir: String,
+    cache: Box<Cache + std::marker::Send + std::marker::Sync>,
 }
 
 impl Scraper {
     pub fn new(client: std::sync::Arc<std::sync::Mutex<HttpClient + std::marker::Send>>,
-               cache_dir: &str) -> Scraper {
-        std::fs::create_dir_all(cache_dir).unwrap();
+               cache: Box<Cache + std::marker::Send + std::marker::Sync>) -> Scraper {
         return Scraper{
             client: client,
-            cache_dir: cache_dir.to_string(),
+            cache: cache,
         };
     }
-
-    fn cache_filename(&self, url: &str) -> std::path::PathBuf {
-        let mut path = std::path::PathBuf::from(self.cache_dir.clone());
-        path.push(format!("httpcache_{}",
-                          url.to_string().replace("/", "_").replace(".", "_")));
-        return path;
-    }
-
-    fn get_age(cache_filename: &std::path::Path) -> ListsResult<std::time::Duration> {
-        let md = try!(std::fs::metadata(cache_filename));
-        let mtime = try!(md.modified());
-        return match std::time::SystemTime::now().duration_since(mtime) {
-            Ok(age) => Ok(age),
-            Err(e) => Err(ListsError::Unknown(format!("{}", e))),
-        }
-    }
     
-    fn has_recent_cache(&self, cache_filename: &std::path::Path) -> bool {
-        let maybe_age = Scraper::get_age(cache_filename);
-        return maybe_age.is_ok() &&
-            maybe_age.unwrap() < std::time::Duration::new(24 * 60 * 60, 0);
-    }
-    
-    pub fn fetch(&self, url: &str) -> ListsResult<String> {
-        let cache_filename = self.cache_filename(url);
-
-        if self.has_recent_cache(&cache_filename) {
-            println!("Using cache {}", cache_filename.as_path().to_str().unwrap());
-            let mut cache_file = try!(std::fs::File::open(cache_filename));
-            let mut body = String::new();
-            try!(cache_file.read_to_string(&mut body));
-            return Ok(body);
+    pub fn fetch(&mut self, url: &str) -> ListsResult<String> {
+        match self.cache.get(CACHE_NAMESPACE, url) {
+            Some(data) => return Ok(data),
+            None => (),
         }
-        
+
         let body = try!(self.client.lock().unwrap().get(url));
-        let mut cache_file = try!(std::fs::File::create(
-            cache_filename));
 
-        try!(cache_file.write_all(body.as_bytes()));
-        
+        self.cache.put(CACHE_NAMESPACE, url, &body,
+                       ExpirationPolicy::After(
+                           std::time::Duration::from_secs(86400))).ok();
         return Ok(body);
     }
 }
@@ -96,6 +69,7 @@ mod tests {
     
     use super::HttpClient;
 
+    use cache::FileCache;
     use std::ops::DerefMut;
     use result::ListsError;
     use result::ListsResult;
@@ -126,7 +100,9 @@ mod tests {
         populate_pages(client.lock().unwrap().deref_mut());
 
         {
-            let scraper = super::Scraper::new(client.clone(), CACHE_DIR);
+            let mut scraper = super::Scraper::new(
+                client.clone(),
+                Box::new(FileCache::new(CACHE_DIR)));
             assert_eq!("It's google!".to_string(),
                        scraper.fetch("http://www.google.com").unwrap());
         }
@@ -141,7 +117,9 @@ mod tests {
         populate_pages(client.lock().unwrap().deref_mut());
 
         {
-            let scraper = super::Scraper::new(client.clone(), CACHE_DIR);
+            let mut scraper = super::Scraper::new(
+                client.clone(),
+                Box::new(FileCache::new(CACHE_DIR)));
 
             assert_eq!("It's google!".to_string(),
                        scraper.fetch("http://www.google.com").unwrap());

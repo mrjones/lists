@@ -18,18 +18,20 @@ use result::ListsError;
 use result::ListsResult;
 use std::hash::Hash;
 use std::hash::Hasher;
+use std::ops::DerefMut;
 
 struct ServerContext {
 //    conn_pool: Box<mysql::Pool>,
     db: data::Db,
-    streeteasy: streeteasy::StreetEasyClient,
+    streeteasy: std::sync::Mutex<streeteasy::StreetEasyClient>,
 }
 
 impl ServerContext {
     fn new(conn_pool: mysql::Pool) -> ServerContext {
         return ServerContext {
             db: data::Db{conn: Box::new(conn_pool)},
-            streeteasy: streeteasy::StreetEasyClient::new(),
+            streeteasy: std::sync::Mutex::new(
+                streeteasy::StreetEasyClient::new()),
         }
     }
 }
@@ -53,13 +55,13 @@ fn all_lists(server_context: &ServerContext, user: &User, _: rustful::Context) -
     return Ok(Box::new(try!(server_context.db.fetch_all_lists(user))));
 }
 
-fn expand_list_annotations(list: &mut FullList, se_client: &streeteasy::StreetEasyClient) {
+fn expand_list_annotations(list: &mut FullList, se_client: &mut streeteasy::StreetEasyClient) {
     for mut item in &mut list.items {
         expand_item_annotations(&mut item, se_client);
     }
 }
 
-fn expand_item_annotations(item: &mut FullItem, se_client: &streeteasy::StreetEasyClient) {
+fn expand_item_annotations(item: &mut FullItem, se_client: &mut streeteasy::StreetEasyClient) {
     item.streeteasy_annotations = item.link_annotations.iter().filter_map(|link| {
         if !link.url.contains("streeteasy.com") {
             return None;
@@ -83,7 +85,7 @@ fn expand_item_annotations(item: &mut FullItem, se_client: &streeteasy::StreetEa
 fn one_list(server_context: &ServerContext, _: &User, context: rustful::Context) -> ListsResult<Box<ToJson>> {
     let list_id = try!(lookup_param::<i64>("list_id", &context));
     let mut list = try!(server_context.db.lookup_list(list_id));
-    expand_list_annotations(&mut list, &server_context.streeteasy);
+    expand_list_annotations(&mut list, server_context.streeteasy.lock().unwrap().deref_mut());
     return Ok(Box::new(list));
 }
 
@@ -191,7 +193,7 @@ fn add_annotation(server_context: &ServerContext, _: &User, mut context: rustful
     try!(server_context.db.add_annotation(item_id, &annotation.kind, &annotation.body));
 
     let mut item = try!(server_context.db.lookup_list_item(list_id, item_id));
-    expand_item_annotations(&mut item, &server_context.streeteasy);
+    expand_item_annotations(&mut item, server_context.streeteasy.lock().unwrap().deref_mut());
     
     return Ok(Box::new(item));
 }
