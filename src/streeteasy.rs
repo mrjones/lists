@@ -11,8 +11,6 @@ use result::ListsError;
 use result::ListsResult;
 use scrape::HyperHttpClient;
 use scrape::Scraper;
-use std::io::Read;
-use std::io::Write;
 use std::ops::Deref;
 
 pub struct StreetEasyClient {
@@ -55,7 +53,7 @@ impl StreetEasyClient {
         }
     }
 
-    fn listing_cache_lookup(&self, url: &str) -> ListsResult<ListingData> {
+    fn parse_cache_lookup(&self, url: &str) -> ListsResult<ListingData> {
         let data = self.cache.get(PARSE_CACHE_NAMESPACE, url);
         if !data.is_some() {
             return Err(ListsError::DoesNotExist);
@@ -63,7 +61,7 @@ impl StreetEasyClient {
         return ListingData::from_json(data.unwrap().as_str());
     }
 
-    fn listing_cache_save(&self, url: &str, listing: &ListingData) -> ListsResult<()> {
+    fn parse_cache_save(&self, url: &str, listing: &ListingData) -> ListsResult<()> {
         let data = listing.to_json();
         return self.cache.put(PARSE_CACHE_NAMESPACE, url, &data,
                        ExpirationPolicy::After(
@@ -71,7 +69,7 @@ impl StreetEasyClient {
     }
     
     pub fn lookup_listing(&self, url: &str) -> ListsResult<ListingData> {
-        let cache_entry = self.listing_cache_lookup(url);
+        let cache_entry = self.parse_cache_lookup(url);
         if cache_entry.is_ok() {
             return cache_entry;
         }
@@ -118,7 +116,7 @@ impl StreetEasyClient {
             name: name,
         };
 
-        self.listing_cache_save(url, &listing).ok();
+        self.parse_cache_save(url, &listing).ok();
         return Ok(listing);
     }
 }
