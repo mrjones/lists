@@ -18,7 +18,6 @@ use result::ListsError;
 use result::ListsResult;
 use std::hash::Hash;
 use std::hash::Hasher;
-use std::ops::DerefMut;
 
 struct ServerContext {
 //    conn_pool: Box<mysql::Pool>,

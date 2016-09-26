@@ -4,6 +4,8 @@ extern crate rustc_serialize;
 extern crate std;
 
 use self::kuchiki::traits::TendrilSink;
+use cache::Cache;
+use cache::ExpirationPolicy;
 use cache::FileCache;
 use result::ListsError;
 use result::ListsResult;
@@ -15,7 +17,7 @@ use std::ops::Deref;
 
 pub struct StreetEasyClient {
     scraper: Scraper,
-    cache_dir: String,
+    cache: FileCache,
 
     price_regex: regex::Regex,
 }
@@ -36,6 +38,8 @@ impl ListingData {
     }
 }
 
+const PARSE_CACHE_NAMESPACE: &'static str = "PARSE";
+
 impl StreetEasyClient {
     pub fn new() -> StreetEasyClient {
         let cache_dir = "/home/mrjones/lists.cache/".to_string();
@@ -46,36 +50,24 @@ impl StreetEasyClient {
                 std::sync::Arc::new(std::sync::Mutex::new(
                     HyperHttpClient::new())),
                 Box::new(FileCache::new(&cache_dir))),
-            cache_dir: cache_dir,
+            cache: FileCache::new(&cache_dir),
             price_regex: regex::Regex::new("(\\$[0-9,]+)").unwrap(),
         }
     }
 
-    fn cache_filename(&self, url: &str) -> std::path::PathBuf {
-        let mut path = std::path::PathBuf::from(self.cache_dir.clone());
-        path.push(format!("listingcache_{}",
-                          url.to_string().replace("/", "_").replace(".", "_")));
-        return path;
-    }
-
     fn listing_cache_lookup(&self, url: &str) -> ListsResult<ListingData> {
-        let path = self.cache_filename(url);
-        if !path.exists() {
+        let data = self.cache.get(PARSE_CACHE_NAMESPACE, url);
+        if !data.is_some() {
             return Err(ListsError::DoesNotExist);
         }
-
-        let mut cache_file = try!(std::fs::File::open(path));
-        let mut body = String::new();
-        try!(cache_file.read_to_string(&mut body));
-
-        return ListingData::from_json(body.as_str());
+        return ListingData::from_json(data.unwrap().as_str());
     }
 
     fn listing_cache_save(&self, url: &str, listing: &ListingData) -> ListsResult<()> {
-        let path = self.cache_filename(url);
-        let mut cache_file = try!(std::fs::File::create(path));
-        try!(cache_file.write_all(listing.to_json().as_bytes()));
-        return Ok(());
+        let data = listing.to_json();
+        return self.cache.put(PARSE_CACHE_NAMESPACE, url, &data,
+                       ExpirationPolicy::After(
+                           std::time::Duration::from_secs(86400)));
     }
     
     pub fn lookup_listing(&self, url: &str) -> ListsResult<ListingData> {
