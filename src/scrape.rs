@@ -48,7 +48,7 @@ impl Scraper {
         };
     }
     
-    pub fn fetch(&mut self, url: &str) -> ListsResult<String> {
+    pub fn fetch(&self, url: &str) -> ListsResult<String> {
         match self.cache.get(CACHE_NAMESPACE, url) {
             Some(data) => return Ok(data),
             None => (),
@@ -100,7 +100,7 @@ mod tests {
         populate_pages(client.lock().unwrap().deref_mut());
 
         {
-            let mut scraper = super::Scraper::new(
+            let scraper = super::Scraper::new(
                 client.clone(),
                 Box::new(FileCache::new(CACHE_DIR)));
             assert_eq!("It's google!".to_string(),
@@ -117,7 +117,7 @@ mod tests {
         populate_pages(client.lock().unwrap().deref_mut());
 
         {
-            let mut scraper = super::Scraper::new(
+            let scraper = super::Scraper::new(
                 client.clone(),
                 Box::new(FileCache::new(CACHE_DIR)));
 

@@ -5,14 +5,15 @@ use result::ListsError;
 use result::ListsResult;
 use std::io::Read;
 use std::io::Write;
+use std::ops::DerefMut;
 
 // TODO:
 // - Time-based expiration
 // - Space-based expiration
 // - Multithreaded access
 pub trait Cache {
-    fn get(&mut self, namespace: &str, key: &str) -> Option<String>;
-    fn put(&mut self, namespace: &str, key: &str, value: &str, expiration: ExpirationPolicy) -> ListsResult<()>;
+    fn get(&self, namespace: &str, key: &str) -> Option<String>;
+    fn put(&self, namespace: &str, key: &str, value: &str, expiration: ExpirationPolicy) -> ListsResult<()>;
 }
 
 pub enum ExpirationPolicy {
@@ -86,7 +87,7 @@ impl FileCache {
         return path;
     }
 
-    fn get_result(&mut self, namespace: &str, key: &str) -> ListsResult<String> {
+    fn get_result(&self, namespace: &str, key: &str) -> ListsResult<String> {
         let cache_filename = self.cache_filename(namespace, key);
 
         if !cache_filename.exists() {
@@ -115,14 +116,14 @@ impl FileCache {
 }
 
 impl Cache for FileCache {
-    fn get(&mut self, namespace: &str, key: &str) -> Option<String> {
+    fn get(&self, namespace: &str, key: &str) -> Option<String> {
         return match self.get_result(namespace, key) {
             Err(_) => None,
             Ok(data) => Some(data),
         }
     }
 
-    fn put(&mut self, namespace: &str, key: &str, value: &str, expiration: ExpirationPolicy) -> ListsResult<()> {
+    fn put(&self, namespace: &str, key: &str, value: &str, expiration: ExpirationPolicy) -> ListsResult<()> {
         let cache_filename = self.cache_filename(namespace, key);
         let mut file = try!(std::fs::File::create(cache_filename));
 
@@ -163,14 +164,14 @@ struct MemoryCacheEntry {
 }
 
 pub struct MemoryCache {
-    data: std::collections::HashMap<String, MemoryCacheEntry>,
+    data: std::sync::Mutex<std::collections::HashMap<String, MemoryCacheEntry>>,
     clock: std::sync::Arc<std::sync::Mutex<Clock>>,
 }
 
 impl MemoryCache {
     fn new() -> MemoryCache {
         return MemoryCache {
-            data: std::collections::HashMap::new(),
+            data: std::sync::Mutex::new(std::collections::HashMap::new()),
             clock: std::sync::Arc::new(std::sync::Mutex::new(RealClock{})),
         }
     }
@@ -193,9 +194,9 @@ impl MemoryCache {
 }
 
 impl Cache for MemoryCache {
-    fn get(&mut self, namespace: &str, key: &str) -> Option<String> {
+    fn get(&self, namespace: &str, key: &str) -> Option<String> {
         let key = MemoryCache::map_key(namespace, key);
-        match self.data.get(&key) {
+        match self.data.lock().unwrap().get(&key) {
             None => return None,
             Some(ref entry) => {
                 if entry.expiration.is_some() &&
@@ -208,9 +209,9 @@ impl Cache for MemoryCache {
         }
     }
 
-    fn put(&mut self, namespace: &str, key: &str, value: &str, policy: ExpirationPolicy) -> ListsResult<()> {
+    fn put(&self, namespace: &str, key: &str, value: &str, policy: ExpirationPolicy) -> ListsResult<()> {
         let expiration = self.expiration(policy);
-        self.data.insert(
+        self.data.lock().unwrap().deref_mut().insert(
             MemoryCache::map_key(namespace, key),
             MemoryCacheEntry{
                 value: value.to_string(),
@@ -246,7 +247,7 @@ mod tests {
         let clock = std::sync::Arc::new(std::sync::Mutex::new(FakeClock::new()));
         return CacheHandle{
             cache: Box::new(MemoryCache{
-                data: std::collections::HashMap::new(),
+                data: std::sync::Mutex::new(std::collections::HashMap::new()),
                 clock: clock.clone(),
             }),
             clock: clock,
@@ -274,7 +275,7 @@ mod tests {
     fn simple_put_get() {
         for handle in &mut all_caches() {
             println!("== {} ==", handle.debug_label);
-            let mut cache = &mut handle.cache;
+            let cache = &mut handle.cache;
             cache.put("ns", "key", "val", ExpirationPolicy::Never)
                 .expect(handle.debug_label);
             assert_eq!("val".to_string(),
@@ -286,7 +287,7 @@ mod tests {
     fn overwrite() {
         for handle in &mut all_caches() {
             println!("== {} ==", handle.debug_label);
-            let mut cache = &mut handle.cache;
+            let cache = &mut handle.cache;
             cache.put("ns", "key", "val1", ExpirationPolicy::Never)
                 .expect(handle.debug_label);
             cache.put("ns", "key", "val2", ExpirationPolicy::Never)
@@ -300,7 +301,7 @@ mod tests {
     fn time_based_expiration() {
         for handle in &mut all_caches() {
             println!("== {} ==", handle.debug_label);
-            let mut cache = &mut handle.cache;
+            let cache = &mut handle.cache;
             let clock = &mut handle.clock;
             let start_time = clock.lock().unwrap().now();
 

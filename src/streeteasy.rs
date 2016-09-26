@@ -78,7 +78,7 @@ impl StreetEasyClient {
         return Ok(());
     }
     
-    pub fn lookup_listing(&mut self, url: &str) -> ListsResult<ListingData> {
+    pub fn lookup_listing(&self, url: &str) -> ListsResult<ListingData> {
         let cache_entry = self.listing_cache_lookup(url);
         if cache_entry.is_ok() {
             return cache_entry;
@@ -137,7 +137,7 @@ mod tests {
 
     #[test]
     fn parse_price() {
-        let mut client = StreetEasyClient::new();
+        let client = StreetEasyClient::new();
         let listing = client.lookup_listing("http://streeteasy.com/sale/1241009");
         assert_eq!(2350000, listing.unwrap().price_usd);
     }
