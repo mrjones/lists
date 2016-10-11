@@ -7,7 +7,6 @@ use storage_format;
 use streeteasy;
 
 use protobuf::Message;
-use std::io::Write;
 use std::hash::Hash;
 use std::hash::Hasher;
 
@@ -122,6 +121,7 @@ impl AnnotationExpander {
             Ok(listing) => {
                 let mut hasher = std::hash::SipHasher::new();
                 listing.name.hash(&mut hasher);
+                hasher.write_i64(item_id);
 
                 let mut a = storage_format::StreetEasyAnnotation::new();
                 a.set_price_usd(listing.price_usd);

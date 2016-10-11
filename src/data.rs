@@ -149,6 +149,7 @@ impl Db {
     }
 
     pub fn delete_list(&self, list_id: i64) -> ListsResult<()> {
+        let _ = dbtry!(self.conn.prep_exec("DELETE FROM lists.item_auto_annotations WHERE item_id IN (SELECT id FROM lists.items WHERE list_id = ?)", (list_id,)));
         let _ = dbtry!(self.conn.prep_exec("DELETE FROM lists.item_annotations WHERE item_id IN (SELECT id FROM lists.items WHERE list_id = ?)", (list_id,)));
         let _ = dbtry!(self.conn.prep_exec("DELETE FROM lists.items WHERE list_id = ?", (list_id,)));
         let _ = dbtry!(self.conn.prep_exec("DELETE FROM lists.list_users WHERE list_id = ?", (list_id,)));
@@ -157,6 +158,7 @@ impl Db {
     }
     
     pub fn delete_item(&self, item_id: i64) -> ListsResult<()> {
+        let _ = dbtry!(self.conn.prep_exec("DELETE FROM lists.item_auto_annotations WHERE item_id = ?", (item_id,)));
         let _ = dbtry!(self.conn.prep_exec("DELETE FROM lists.item_annotations WHERE item_id = ?", (item_id,)));
         let _ = dbtry!(self.conn.prep_exec("DELETE FROM lists.items WHERE id = ?", (item_id,)));
         return Ok(());
