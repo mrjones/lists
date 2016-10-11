@@ -1,4 +1,5 @@
 extern crate mysql;
+extern crate protobuf;
 #[macro_use]
 extern crate rustful;
 extern crate rustc_serialize;
@@ -6,11 +7,13 @@ extern crate url;
 
 use rustc_serialize::json::ToJson;
 
+mod annotations;
 mod cache;
 mod data;
 mod model;
 mod result;
 mod scrape;
+mod storage_format;
 mod streeteasy;
 
 use model::*;
@@ -21,15 +24,19 @@ use std::hash::Hasher;
 
 struct ServerContext {
 //    conn_pool: Box<mysql::Pool>,
-    db: data::Db,
+    db: std::sync::Arc<std::sync::Mutex<data::Db>>,
     streeteasy: streeteasy::StreetEasyClient,
+    expander: annotations::AnnotationExpander,
 }
 
 impl ServerContext {
     fn new(conn_pool: mysql::Pool) -> ServerContext {
+        let db = std::sync::Arc::new(std::sync::Mutex::new(
+            data::Db{conn: Box::new(conn_pool)}));
         return ServerContext {
-            db: data::Db{conn: Box::new(conn_pool)},
+            db: db.clone(),
             streeteasy: streeteasy::StreetEasyClient::new(),
+            expander: annotations::AnnotationExpander::new(db),
         }
     }
 }
@@ -46,50 +53,32 @@ fn lookup_param<T : std::str::FromStr>(param_name: &str, context: &rustful::Cont
 }
 
 fn all_users(server_context: &ServerContext, _: rustful::Context) -> ListsResult<Box<ToJson>> {
-    return Ok(Box::new(try!(server_context.db.fetch_all_users())));
+    return Ok(Box::new(try!(server_context.db.lock().unwrap().fetch_all_users())));
 }
 
 fn all_lists(server_context: &ServerContext, user: &User, _: rustful::Context) -> ListsResult<Box<ToJson>> {
-    return Ok(Box::new(try!(server_context.db.fetch_all_lists(user))));
-}
-
-fn expand_list_annotations(list: &mut FullList, se_client: &streeteasy::StreetEasyClient) {
-    for mut item in &mut list.items {
-        expand_item_annotations(&mut item, se_client);
-    }
-}
-
-fn expand_item_annotations(item: &mut FullItem, se_client: &streeteasy::StreetEasyClient) {
-    item.streeteasy_annotations = item.link_annotations.iter().filter_map(|link| {
-        if !link.url.contains("streeteasy.com") {
-            return None;
-        }
-        let listing_result = se_client.lookup_listing(&link.url);
-        return match listing_result {
-            Ok(listing) => {
-                let mut hasher = std::hash::SipHasher::new();
-                listing.name.hash(&mut hasher);
-                return Some(model::FullStreetEasyAnnotation{
-                    price_usd: listing.price_usd,
-                    name: listing.name,
-                    hash: hasher.finish(),
-                })
-            },
-            Err(_) => None,
-        };
-    }).collect();
+    return Ok(Box::new(try!(server_context.db.lock().unwrap().fetch_all_lists(user))));
 }
 
 fn one_list(server_context: &ServerContext, _: &User, context: rustful::Context) -> ListsResult<Box<ToJson>> {
     let list_id = try!(lookup_param::<i64>("list_id", &context));
-    let mut list = try!(server_context.db.lookup_list(list_id));
-    expand_list_annotations(&mut list, &server_context.streeteasy);
+    let (db_list, items, user_annotations, auto_annotations) =
+        try!(server_context.db.lock().unwrap().lookup_list(list_id));
+;
+
+    let list = FullList{
+        name: db_list.name,
+        items: annotations::parse_and_attach_annotations(
+            items, user_annotations, auto_annotations)
+    };
+    
+//    expand_list_annotations(&mut list, &server_context.streeteasy);
     return Ok(Box::new(list));
 }
 
 fn list_accessors(server_context: &ServerContext, _: &User, context: rustful::Context) -> ListsResult<Box<ToJson>> {
     let list_id = try!(lookup_param::<i64>("list_id", &context));
-    return Ok(Box::new(try!(server_context.db.fetch_list_accessors(list_id))));
+    return Ok(Box::new(try!(server_context.db.lock().unwrap().fetch_list_accessors(list_id))));
 }
 
 fn add_user_to_list(server_context: &ServerContext, user: &User, mut context: rustful::Context) -> ListsResult<Box<ToJson>> {
@@ -102,7 +91,7 @@ fn add_user_to_list(server_context: &ServerContext, user: &User, mut context: ru
 
     // TODO: lift out a level?
     let list_id = try!(lookup_param::<i64>("list_id", &context));
-    try!(server_context.db.add_user_to_list(list_id, new_user.id));
+    try!(server_context.db.lock().unwrap().add_user_to_list(list_id, new_user.id));
     
     return list_accessors(server_context, user, context);
 }
@@ -117,7 +106,7 @@ fn remove_user_from_list(server_context: &ServerContext, user: &User, mut contex
 
     // TODO: lift out a level?
     let list_id = try!(lookup_param::<i64>("list_id", &context));
-    try!(server_context.db.remove_user_from_list(list_id, old_user.id));
+    try!(server_context.db.lock().unwrap().remove_user_from_list(list_id, old_user.id));
     
     return list_accessors(server_context, user, context);
 }
@@ -125,7 +114,7 @@ fn remove_user_from_list(server_context: &ServerContext, user: &User, mut contex
 fn delete_list(server_context: &ServerContext, _: &User, context: rustful::Context) -> ListsResult<Box<ToJson>> {
     let list_id = try!(lookup_param::<i64>("list_id", &context));
     println!("delete_list :: {}", list_id);
-    return Ok(Box::new(try!(server_context.db.delete_list(list_id))));
+    return Ok(Box::new(try!(server_context.db.lock().unwrap().delete_list(list_id))));
 }
 
 fn delete_item(server_context: &ServerContext, _: &User, context: rustful::Context) -> ListsResult<Box<ToJson>> {
@@ -133,7 +122,7 @@ fn delete_item(server_context: &ServerContext, _: &User, context: rustful::Conte
     // TODO: check user can edit list
 
     let item_id = try!(lookup_param::<i64>("item_id", &context));
-    return Ok(Box::new(try!(server_context.db.delete_item(item_id))));
+    return Ok(Box::new(try!(server_context.db.lock().unwrap().delete_item(item_id))));
 }
 
 fn add_list(server_context: &ServerContext, user: &User, mut context: rustful::Context) -> ListsResult<Box<ToJson>> {
@@ -145,7 +134,7 @@ fn add_list(server_context: &ServerContext, user: &User, mut context: rustful::C
     println!("add_list :: they posted: {:?}", list);
 
     // TODO: lift out a level?
-    let db_list = try!(server_context.db.add_list(&list.name, user.id));
+    let db_list = try!(server_context.db.lock().unwrap().add_list(&list.name, user.id));
     
     return Ok(Box::new(db_list));
 }
@@ -161,7 +150,7 @@ fn add_item(server_context: &ServerContext, _: &User, mut context: rustful::Cont
 
     // TODO: lift out a level?
     let list_id = try!(lookup_param::<i64>("list_id", &context));
-    let db_item = try!(server_context.db.add_item(list_id, &item.name, &item.description));
+    let db_item = try!(server_context.db.lock().unwrap().add_item(list_id, &item.name, &item.description));
     
     return Ok(Box::new(FullItem{
         id: db_item.id,
@@ -188,10 +177,14 @@ fn add_annotation(server_context: &ServerContext, _: &User, mut context: rustful
     let list_id = try!(lookup_param::<i64>("list_id", &context));
     let item_id = try!(lookup_param::<i64>("item_id", &context));
     // TODO: check item belongs to list and user has permission
-    try!(server_context.db.add_annotation(item_id, &annotation.kind, &annotation.body));
+    let saved_annotation = try!(server_context.db.lock().unwrap().add_annotation(item_id, &annotation.kind, &annotation.body));
 
-    let mut item = try!(server_context.db.lookup_list_item(list_id, item_id));
-    expand_item_annotations(&mut item, &server_context.streeteasy);
+    server_context.expander.generate_auto_annotations(
+        item_id, saved_annotation.id,
+        &saved_annotation.kind, &saved_annotation.body);
+
+    let mut item = try!(server_context.db.lock().unwrap().lookup_list_item(list_id, item_id));
+//    expand_item_annotations(&mut item, &server_context.streeteasy);
     
     return Ok(Box::new(item));
 }
@@ -231,7 +224,7 @@ impl rustful::Handler for Api {
                     context.global.get().expect("Couldn't get server_context");
 
                 let user_id = lookup_param::<i64>("user_id", &context).unwrap();
-                let user = server_context.db.lookup_user(user_id)
+                let user = server_context.db.lock().unwrap().lookup_user(user_id)
                     .expect("couldn't look up user");
 
                 match handler(server_context, &user, context) {

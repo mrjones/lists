@@ -5,6 +5,7 @@
 
 USE lists;
 
+DROP TABLE IF EXISTS item_auto_annotations;
 DROP TABLE IF EXISTS item_annotations;
 DROP TABLE IF EXISTS items;
 DROP TABLE IF EXISTS list_users;
@@ -49,3 +50,15 @@ CREATE TABLE item_annotations (
        PRIMARY KEY(id),
        FOREIGN KEY(item_id) REFERENCES items(id)
 );
+
+CREATE TABLE item_auto_annotations (
+       id BIGINT NOT NULL AUTO_INCREMENT,
+       item_id BIGINT,
+       parent_id BIGINT,
+       kind ENUM('LINK_TITLE', 'STREETEASY'),
+       body BLOB,
+       PRIMARY KEY(id),
+       FOREIGN KEY(item_id) REFERENCES items(id),
+       FOREIGN KEY(parent_id) REFERENCES item_annotations(id)
+);
+          

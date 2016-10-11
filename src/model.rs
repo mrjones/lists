@@ -106,11 +106,34 @@ impl DbObject for Annotation {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, RustcDecodable, RustcEncodable)]
+pub struct AutoAnnotation {
+    pub id: i64,
+    pub item_id: i64,
+    pub parent_id: i64,
+    pub kind: String,
+    pub body: Vec<u8>,
+}
+to_json_for_encodable!(AutoAnnotation);
+
+impl DbObject for AutoAnnotation {
+    fn from_row(row: mysql::Row) -> AutoAnnotation {
+        let (id, item_id, parent_id, kind, body) = mysql::from_row(row);
+        return AutoAnnotation {
+            id: id,
+            item_id: item_id,
+            parent_id: parent_id,
+            kind: kind,
+            body: body,
+        };
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, RustcDecodable, RustcEncodable)]
 pub struct AnnotatedItem {
     pub item: Item,
     pub annotations: Vec<Annotation>,
+    pub auto_annotations: Vec<AutoAnnotation>,
 }
 to_json_for_encodable!(AnnotatedItem);
 
@@ -128,7 +151,7 @@ pub struct FullTextAnnotation {
 }
 to_json_for_encodable!(FullTextAnnotation);
 
-#[derive(Clone, RustcEncodable)]
+#[derive(Clone, Debug, RustcEncodable)]
 pub struct FullStreetEasyAnnotation {
     pub hash: u64,
     pub price_usd: i32,

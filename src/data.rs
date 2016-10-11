@@ -7,6 +7,7 @@ use model::FullLinkAnnotation;
 use model::FullList;
 use model::FullTextAnnotation;
 use model::Annotation;
+use model::AutoAnnotation;
 use model::Item;
 use model::List;
 use model::User;
@@ -84,7 +85,9 @@ impl Db {
         }
     }
 
-    pub fn lookup_list(&self, list_id: i64) -> ListsResult<FullList> {
+    // TODO(mrjones): Clean up the return type
+    pub fn lookup_list(&self, list_id: i64) ->
+        ListsResult<(FullList, Vec<Item>, Vec<Annotation>, Vec<AutoAnnotation>)> {
         let mut list_result = dbtry!(self.conn.prep_exec("SELECT id, name FROM lists.lists WHERE id = ?", (list_id,)));
         let list = try!(extract_one::<List>(&mut list_result));
         
@@ -94,31 +97,13 @@ impl Db {
         let db_annotations = try!(to_vec::<DbAnnotation>(
             dbtry!(self.conn.prep_exec("SELECT lists.item_annotations.id, lists.items.id, lists.item_annotations.kind, lists.item_annotations.body FROM lists.items JOIN lists.item_annotations ON lists.items.id = lists.item_annotations.item_id WHERE lists.items.list_id = ?", (list_id,)))));
 
-        let mut full_items : Vec<FullItem> = vec![];
-        
-        for db_item in db_items {
-            full_items.push(FullItem{
-                id: db_item.id,
-                name: db_item.name,
-                description: db_item.description,
-                link_annotations: vec![],
-                streeteasy_annotations: vec![],
-                text_annotations: vec![],
-            });
-        }
-        
-        for db_annotation in db_annotations {
-            let index = full_items.binary_search_by_key(
-                &db_annotation.item_id, |item| item.id)
-                .expect("dangling annotation");
+        let db_auto_annotations = try!(to_vec::<AutoAnnotation>(
+            dbtry!(self.conn.prep_exec("SELECT lists.item_auto_annotations.id, lists.item_auto_annotations.parent_id, lists.items.id, lists.item_auto_annotations.kind, lists.item_auto_annotations.body FROM lists.items JOIN lists.item_auto_annotations ON lists.items.id = lists.item_auto_annotations.item_id WHERE lists.items.list_id = ?", (list_id,)))));
 
-            Db::append_annotation(&mut full_items[index], &db_annotation);
-        }
-
-        return Ok(FullList {
+        return Ok((FullList {
             name: list.name,
-            items: full_items,
-        });
+            items: vec![],
+        }, db_items.clone(), db_annotations, db_auto_annotations));
     }
     
     pub fn lookup_list_item(&self, list_id: i64, item_id: i64) -> ListsResult<FullItem> {
@@ -194,6 +179,13 @@ impl Db {
 
         let mut result = dbtry!(conn.prep_exec("SELECT id, item_id, kind, body FROM lists.item_annotations WHERE id = LAST_INSERT_ID()", ()));
         return extract_one::<Annotation>(&mut result);
+    }
+
+    pub fn add_auto_annotation(&self, item_id: i64, parent_id: i64, kind: &str, body: &[u8]) -> ListsResult<AutoAnnotation> {
+        let mut conn = self.conn.get_conn().unwrap();
+        let _ = dbtry!(conn.prep_exec("INSERT INTO lists.item_auto_annotations (item_id, parent_id, kind, body) VALUES (?, ?, ?, ?)", (item_id, parent_id, kind, body)));
+        let mut result = dbtry!(conn.prep_exec("SELECT id, item_id, parent_id, kind, body FROM lists.item_auto_annotations WHERE id = LAST_INSERT_ID()", ()));
+        return extract_one::<AutoAnnotation>(&mut result);
     }
 
     pub fn add_user_to_list(&self, list_id: i64, user_id: i64) -> ListsResult<()> {
