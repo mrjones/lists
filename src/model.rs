@@ -194,3 +194,35 @@ pub struct FullList {
     pub items: Vec<FullItem>,
 }
 to_json_for_encodable!(FullList);
+
+
+pub struct DbWorkQueueTask {
+    pub id: i64,
+    pub payload: Vec<u8>,
+}
+impl DbObject for DbWorkQueueTask {
+    fn from_row(row: mysql::Row) -> DbWorkQueueTask {
+        let (id, payload) = mysql::from_row(row);
+        return DbWorkQueueTask {
+            id: id,
+            payload: payload,
+        };
+    }
+}
+
+pub struct DbWorkQueueLease {
+    pub id: i64,
+    pub payload: Vec<u8>,
+    pub expiration: std::time::SystemTime,
+}
+impl DbObject for DbWorkQueueLease {
+    fn from_row(row: mysql::Row) -> DbWorkQueueLease {
+        let (id, payload, epoch_expiration) = mysql::from_row(row);
+        return DbWorkQueueLease {
+            id: id,
+            payload: payload,
+            expiration: std::time::UNIX_EPOCH +
+                std::time::Duration::new(epoch_expiration, 0),
+        };
+    }
+}

@@ -15,6 +15,7 @@ mod result;
 mod scrape;
 mod storage_format;
 mod streeteasy;
+mod workqueue;
 
 use model::*;
 use result::ListsError;
@@ -33,10 +34,15 @@ impl ServerContext {
     fn new(conn_pool: mysql::Pool) -> ServerContext {
         let db = std::sync::Arc::new(std::sync::Mutex::new(
             data::Db{conn: Box::new(conn_pool)}));
+        let workqueue = std::sync::Arc::new(std::sync::Mutex::new(
+            workqueue::DbWorkQueue::new(
+                std::time::Duration::new(60, 0),
+                "annotations",
+                db.clone())));
         return ServerContext {
             db: db.clone(),
             streeteasy: streeteasy::StreetEasyClient::new(),
-            expander: annotations::AnnotationExpander::new(db),
+            expander: annotations::AnnotationExpander::new(db, workqueue),
         }
     }
 }

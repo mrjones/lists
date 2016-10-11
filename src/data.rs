@@ -1,7 +1,10 @@
+extern crate chrono;
 extern crate std;
 extern crate mysql;
 
 use model::DbObject;
+use model::DbWorkQueueLease;
+use model::DbWorkQueueTask;
 use model::FullItem;
 use model::FullLinkAnnotation;
 use model::FullList;
@@ -194,4 +197,80 @@ impl Db {
         return Ok(());
     }
 
+
+    pub fn enqueue_work(&self, queue_name: &str, payload: &[u8]) -> ListsResult<()> {
+        let mut conn = self.conn.get_conn().unwrap();
+        let _ = dbtry!(conn.prep_exec("INSERT INTO lists.work_queue (queue_name, payload) VALUES (?, ?)", (queue_name, payload))); 
+
+        return Ok(());
+    }
+
+    pub fn dequeue_work(&self, queue_name: &str, lease_duration: std::time::Duration) -> ListsResult<Option<DbWorkQueueLease>> {
+        let mut conn = self.conn.get_conn().unwrap();
+        let mut txn = dbtry!(conn.start_transaction(true, None, None));
+
+        let task;
+        {
+            let mut result = dbtry!(txn.prep_exec("SELECT id, payload FROM lists.work_queue.id LEFT OUTER JOIN lists.work_leases WHERE lists.work_leases.id IS NULL AND lists.work_queue.queue_name = ? FOR UPDATE", (queue_name,)));
+            task = try!(extract_one::<DbWorkQueueTask>(&mut result));
+        }
+
+        // TODO: What if no work
+        
+
+        let expiration = std::time::SystemTime::now() + lease_duration;
+        let epoch_expiration = expiration.duration_since(std::time::UNIX_EPOCH).unwrap();
+        {
+            let _ = dbtry!(txn.prep_exec("INSERT INTO lists.work_leases (item_id, epoch_expiration) VALUES (?, ?)", (task.id, epoch_expiration)));
+        }
+        
+        let mut lease;
+        {
+            let mut lease_result = dbtry!(txn.prep_exec("SELECT id, payload, lease_expiration FROM lists.work_leases WHERE id = LAST_INSERT_ID()", ()));
+            lease = try!(extract_one(&mut lease_result));
+        }
+        let _ = dbtry!(txn.commit());
+
+        return Ok(Some(lease));
+    }
+
+    pub fn extend_lease(&self, id: i64, lease_duration: std::time::Duration) -> ListsResult<()> {
+        let expiration = std::time::SystemTime::now() + lease_duration;
+        let epoch_expiration = expiration.duration_since(std::time::UNIX_EPOCH).unwrap();
+
+        let mut conn = self.conn.get_conn().unwrap();
+        let _ = dbtry!(conn.prep_exec("UPDATE lists.work_queue SET epoch_expiration = ? WHERE id = ?", (epoch_expiration, id))); 
+
+        return Ok(());
+    }
+
+    pub fn abort_lease(&self, id: i64) -> ListsResult<()> {
+        let _ = dbtry!(self.conn.prep_exec("DELETE FROM lists.work_leases WHERE id =?", (id,)));
+        return Ok(());
+    }
+
+    pub fn finish_task(&self, id: i64) -> ListsResult<()> {
+        let mut conn = self.conn.get_conn().unwrap();
+        let mut txn = dbtry!(conn.start_transaction(true, None, None));
+        let item_id;
+        {
+            let mut result = dbtry!(txn.prep_exec("SELECT item_id FROM lists.work_leases WHERE id = ?", (id,)));
+            item_id = try!(extract_one::<i64>(&mut result));
+        }
+        {
+            let _ = dbtry!(txn.prep_exec("DELETE FROM lists.work_leases WHERE id = ?", (id,)));
+        }
+        {
+            let _ = dbtry!(txn.prep_exec("DELETE FROM lists.work_queue WHERE id = ?", (item_id,)));
+        }
+        let _ = dbtry!(txn.commit());
+
+        return Ok(());
+    }
+}
+
+impl DbObject for i64 {
+    fn from_row(row: mysql::Row) -> i64 {
+        return mysql::from_row(row);
+    }
 }

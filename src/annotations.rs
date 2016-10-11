@@ -5,6 +5,7 @@ use data;
 use model;
 use storage_format;
 use streeteasy;
+use workqueue;
 
 use protobuf::Message;
 use std::hash::Hash;
@@ -98,13 +99,16 @@ pub fn parse_and_attach_annotations(
 pub struct AnnotationExpander {
     db: std::sync::Arc<std::sync::Mutex<data::Db>>,
     se_client: streeteasy::StreetEasyClient,
+    workqueue: std::sync::Arc<std::sync::Mutex<workqueue::WorkQueue + std::marker::Send>>,
 }
 
 impl AnnotationExpander {
-    pub fn new(db: std::sync::Arc<std::sync::Mutex<data::Db>>) -> AnnotationExpander {
+    pub fn new(db: std::sync::Arc<std::sync::Mutex<data::Db>>,
+               workqueue: std::sync::Arc<std::sync::Mutex<workqueue::WorkQueue + std::marker::Send>>) -> AnnotationExpander {
         return AnnotationExpander{
             db: db,
             se_client: streeteasy::StreetEasyClient::new(),
+            workqueue: workqueue,
         }
     }
     

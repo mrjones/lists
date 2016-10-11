@@ -62,4 +62,16 @@ CREATE TABLE item_auto_annotations (
        FOREIGN KEY(item_id) REFERENCES items(id),
        FOREIGN KEY(parent_id) REFERENCES item_annotations(id)
 );
-          
+
+CREATE TABLE work_queue (
+       id BIGINT NOT NULL AUTO_INCREMENT,
+       queue_name VARCHAR(255),
+       payload BLOB,
+);
+
+CREATE TABLE work_leases (
+       id BIGINT NOT NULL AUTO_INCREMENT,
+       item_id BIGINT,
+       epoch_expiration BIGINT,
+       FOREIGN KEY(item_id) REFERENCES work_queue(id),
+);
