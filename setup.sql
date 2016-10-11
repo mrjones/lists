@@ -55,6 +55,7 @@ CREATE TABLE item_auto_annotations (
        id BIGINT NOT NULL AUTO_INCREMENT,
        item_id BIGINT,
        parent_id BIGINT,
+       mtime TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
        kind ENUM('LINK_TITLE', 'STREETEASY'),
        body BLOB,
        PRIMARY KEY(id),

@@ -48,6 +48,17 @@ fn attach_auto_annotation(item: &mut model::FullItem, auto_annotation: &model::A
     }
 }
 
+pub fn parse_and_attach_annotations_single(
+    item_metadata: model::Item,
+    user_annotations: Vec<model::Annotation>,
+    auto_annotations: Vec<model::AutoAnnotation>) -> model::FullItem {
+
+    let mut out = parse_and_attach_annotations(
+        vec![item_metadata], user_annotations, auto_annotations);
+    assert_eq!(1, out.len());
+    return out.remove(0);
+}
+
 pub fn parse_and_attach_annotations(
     item_metadatas: Vec<model::Item>,
     user_annotations: Vec<model::Annotation>,
@@ -65,7 +76,7 @@ pub fn parse_and_attach_annotations(
             text_annotations: vec![],
         });
     }
-        
+
     for user_annotation in user_annotations {
         let index = complete_items.binary_search_by_key(
             &user_annotation.item_id, |complete_item| complete_item.id)

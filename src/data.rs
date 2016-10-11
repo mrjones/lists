@@ -98,7 +98,7 @@ impl Db {
             dbtry!(self.conn.prep_exec("SELECT lists.item_annotations.id, lists.items.id, lists.item_annotations.kind, lists.item_annotations.body FROM lists.items JOIN lists.item_annotations ON lists.items.id = lists.item_annotations.item_id WHERE lists.items.list_id = ?", (list_id,)))));
 
         let db_auto_annotations = try!(to_vec::<AutoAnnotation>(
-            dbtry!(self.conn.prep_exec("SELECT lists.item_auto_annotations.id, lists.item_auto_annotations.parent_id, lists.items.id, lists.item_auto_annotations.kind, lists.item_auto_annotations.body FROM lists.items JOIN lists.item_auto_annotations ON lists.items.id = lists.item_auto_annotations.item_id WHERE lists.items.list_id = ?", (list_id,)))));
+            dbtry!(self.conn.prep_exec("SELECT lists.item_auto_annotations.id, lists.items.id, lists.item_auto_annotations.parent_id, lists.item_auto_annotations.kind, lists.item_auto_annotations.body, lists.item_auto_annotations.mtime FROM lists.items JOIN lists.item_auto_annotations ON lists.items.id = lists.item_auto_annotations.item_id WHERE lists.items.list_id = ?", (list_id,)))));
 
         return Ok((FullList {
             name: list.name,
@@ -106,7 +106,7 @@ impl Db {
         }, db_items.clone(), db_annotations, db_auto_annotations));
     }
     
-    pub fn lookup_list_item(&self, list_id: i64, item_id: i64) -> ListsResult<FullItem> {
+    pub fn lookup_list_item(&self, list_id: i64, item_id: i64) -> ListsResult<(Item, Vec<Annotation>, Vec<AutoAnnotation>)> {
         let mut item_result =
             dbtry!(self.conn.prep_exec("SELECT id, name, description FROM lists.items WHERE list_id = ? AND id = ?", (list_id, item_id)));
         let db_item = try!(extract_one::<DbItem>(&mut item_result));
@@ -114,20 +114,10 @@ impl Db {
         let db_annotations = try!(to_vec::<DbAnnotation>(
             dbtry!(self.conn.prep_exec("SELECT lists.item_annotations.id, lists.items.id, lists.item_annotations.kind, lists.item_annotations.body FROM lists.items JOIN lists.item_annotations ON lists.items.id = lists.item_annotations.item_id WHERE lists.items.list_id = ? AND lists.items.id = ?", (list_id,item_id)))));
 
-        let mut item = FullItem{
-            id: db_item.id,
-            name: db_item.name,
-            description: db_item.description,
-            link_annotations: vec![],
-            streeteasy_annotations: vec![],
-            text_annotations: vec![],
-        };
-    
-        for db_annotation in db_annotations {
-            Db::append_annotation(&mut item, &db_annotation);
-        }
+        let db_auto_annotations = try!(to_vec::<AutoAnnotation>(
+            dbtry!(self.conn.prep_exec("SELECT lists.item_auto_annotations.id, lists.items.id, lists.item_auto_annotations.parent_id, lists.item_auto_annotations.kind, lists.item_auto_annotations.body, lists.item_auto_annotations.mtime FROM lists.items JOIN lists.item_auto_annotations ON lists.items.id = lists.item_auto_annotations.item_id WHERE lists.items.list_id = ? AND lists.items.id = ?", (list_id,item_id)))));
 
-        return Ok(item);
+        return Ok((db_item, db_annotations, db_auto_annotations));
     }
 
     pub fn fetch_list_accessors(&self, list_id: i64) -> ListsResult<Vec<User>> {
@@ -184,7 +174,7 @@ impl Db {
     pub fn add_auto_annotation(&self, item_id: i64, parent_id: i64, kind: &str, body: &[u8]) -> ListsResult<AutoAnnotation> {
         let mut conn = self.conn.get_conn().unwrap();
         let _ = dbtry!(conn.prep_exec("INSERT INTO lists.item_auto_annotations (item_id, parent_id, kind, body) VALUES (?, ?, ?, ?)", (item_id, parent_id, kind, body)));
-        let mut result = dbtry!(conn.prep_exec("SELECT id, item_id, parent_id, kind, body FROM lists.item_auto_annotations WHERE id = LAST_INSERT_ID()", ()));
+        let mut result = dbtry!(conn.prep_exec("SELECT id, item_id, parent_id, kind, body, mtime FROM lists.item_auto_annotations WHERE id = LAST_INSERT_ID()", ()));
         return extract_one::<AutoAnnotation>(&mut result);
     }
 

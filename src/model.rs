@@ -1,3 +1,4 @@
+extern crate chrono;
 extern crate std;
 extern crate mysql;
 extern crate rustc_serialize;
@@ -106,36 +107,52 @@ impl DbObject for Annotation {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, RustcDecodable, RustcEncodable)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AutoAnnotation {
     pub id: i64,
     pub item_id: i64,
     pub parent_id: i64,
     pub kind: String,
     pub body: Vec<u8>,
+    pub mtime: chrono::NaiveDateTime,
 }
-to_json_for_encodable!(AutoAnnotation);
+
+use mysql::conn::ColumnIndex;
 
 impl DbObject for AutoAnnotation {
-    fn from_row(row: mysql::Row) -> AutoAnnotation {
-        let (id, item_id, parent_id, kind, body) = mysql::from_row(row);
+    fn from_row(mut row: mysql::Row) -> AutoAnnotation {
+/*
+        println!("ROW {:?}", row.unwrap());
+            
+        return AutoAnnotation {
+            id: 1,
+            item_id: 1,
+            parent_id: 1,
+            kind: "foo".to_string(),
+            body: vec![],
+            mtime: chrono::NaiveDateTime::new(
+                chrono::NaiveDate::from_ymd(2016, 10, 16),
+                chrono::NaiveTime::from_hms(12, 0, 0)),
+        };
+*/
+        let (id, item_id, parent_id, kind, body, mtime) = mysql::from_row(row);
         return AutoAnnotation {
             id: id,
             item_id: item_id,
             parent_id: parent_id,
             kind: kind,
             body: body,
+            mtime: mtime,
         };
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, RustcDecodable, RustcEncodable)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AnnotatedItem {
     pub item: Item,
     pub annotations: Vec<Annotation>,
     pub auto_annotations: Vec<AutoAnnotation>,
 }
-to_json_for_encodable!(AnnotatedItem);
 
 #[derive(Clone, RustcEncodable)]
 pub struct FullLinkAnnotation {
@@ -157,6 +174,7 @@ pub struct FullStreetEasyAnnotation {
     pub price_usd: i32,
     pub name: String,
 }
+
 
 #[derive(Clone, RustcEncodable)]
 pub struct FullItem {

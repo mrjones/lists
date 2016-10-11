@@ -183,10 +183,11 @@ fn add_annotation(server_context: &ServerContext, _: &User, mut context: rustful
         item_id, saved_annotation.id,
         &saved_annotation.kind, &saved_annotation.body);
 
-    let mut item = try!(server_context.db.lock().unwrap().lookup_list_item(list_id, item_id));
-//    expand_item_annotations(&mut item, &server_context.streeteasy);
+    let (item, user_annotations, auto_annotations) =
+        try!(server_context.db.lock().unwrap().lookup_list_item(list_id, item_id));
     
-    return Ok(Box::new(item));
+    return Ok(Box::new(annotations::parse_and_attach_annotations_single(
+        item, user_annotations, auto_annotations)));
 }
 
 enum Api {
