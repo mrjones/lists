@@ -3,6 +3,7 @@ extern crate std;
 
 use data;
 use model;
+use result;
 use storage_format;
 use streeteasy;
 use workqueue;
@@ -100,27 +101,39 @@ pub struct AnnotationExpander {
     db: std::sync::Arc<std::sync::Mutex<data::Db>>,
     se_client: streeteasy::StreetEasyClient,
     workqueue: std::sync::Arc<std::sync::Mutex<workqueue::WorkQueue + std::marker::Send>>,
+    work_ready: std::sync::Arc<std::sync::Mutex<std::sync::mpsc::Sender<()>>>,
 }
 
 impl AnnotationExpander {
     pub fn new(db: std::sync::Arc<std::sync::Mutex<data::Db>>,
-               workqueue: std::sync::Arc<std::sync::Mutex<workqueue::WorkQueue + std::marker::Send>>) -> AnnotationExpander {
+               workqueue: std::sync::Arc<std::sync::Mutex<workqueue::WorkQueue + std::marker::Send>>,
+               work_ready: std::sync::Arc<std::sync::Mutex<std::sync::mpsc::Sender<()>>>) -> AnnotationExpander {
         return AnnotationExpander{
             db: db,
             se_client: streeteasy::StreetEasyClient::new(),
             workqueue: workqueue,
+            work_ready: work_ready,
         }
     }
 
+    fn finish_task<T>(&self, result: result::ListsResult<T>, task: &workqueue::Task) {
+        match result {
+            Ok(_) => self.workqueue.lock().unwrap().finish(task.id).unwrap(),
+            Err(_) => self.workqueue.lock().unwrap().abort(task.id).unwrap(),
+        }
+    }
+    
     pub fn process_work_queue(&self) {
         match self.workqueue.lock().unwrap().dequeue() {
             Some((raw_task, _)) => {
                 let mut task = storage_format::RefreshStreetEasyTask::new();
                 task.merge_from_bytes(&raw_task.payload).unwrap();
                 println!("Got work: {:?}", task);
-
-                self.generate_streeteasy_annotation(
-                    task.get_item_id(), task.get_parent_id(), task.get_url());
+                
+                self.finish_task(
+                    self.generate_streeteasy_annotation(
+                        task.get_item_id(), task.get_parent_id(), task.get_url()),
+                    &raw_task);
             },
             None => {
                 println!("No work found");
@@ -137,32 +150,29 @@ impl AnnotationExpander {
 
             self.workqueue.lock().unwrap().enqueue(
                 &task.write_to_bytes().unwrap()).unwrap();
+            self.work_ready.lock().unwrap().send(()).unwrap();
 //            self.generate_streeteasy_annotation(item_id, annotation_id, body);
         }
     }
 
-    fn generate_streeteasy_annotation(&self, item_id: i64, parent_id: i64, url: &str) {
+    fn generate_streeteasy_annotation(&self, item_id: i64, parent_id: i64, url: &str) -> result::ListsResult<()> {
         println!("Working on task: {}", url);
         // TODO(mrjones): Update annotation if already exists
-        let listing_result = self.se_client.lookup_listing(url);
-        return match listing_result {
-            Ok(listing) => {
-                let mut hasher = std::hash::SipHasher::new();
-                listing.name.hash(&mut hasher);
-                hasher.write_i64(item_id);
+        let listing = try!(self.se_client.lookup_listing(url));
+        let mut hasher = std::hash::SipHasher::new();
+        listing.name.hash(&mut hasher);
+        hasher.write_i64(item_id);
 
-                let mut a = storage_format::StreetEasyAnnotation::new();
-                a.set_price_usd(listing.price_usd);
-                a.set_name(listing.name);
-                a.set_hash(hasher.finish());
+        let mut a = storage_format::StreetEasyAnnotation::new();
+        a.set_price_usd(listing.price_usd);
+        a.set_name(listing.name);
+        a.set_hash(hasher.finish());
                 
-                self.db.lock().unwrap().add_auto_annotation(
-                    item_id, parent_id, "STREETEASY",
-                    &a.write_to_bytes().unwrap()).unwrap();
+        try!(self.db.lock().unwrap().add_auto_annotation(
+            item_id, parent_id, "STREETEASY",
+            &a.write_to_bytes().unwrap()));
 
-                println!("Expander says: {:?}", a);
-            },
-            Err(_) => (),
-        };
+        println!("Expander says: {:?}", a);
+        return Ok(());
     }
 }

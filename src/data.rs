@@ -35,12 +35,22 @@ macro_rules! dbtry {
     })
 }
 
+fn extract_one_or_none<T: DbObject>(result: &mut mysql::QueryResult) -> ListsResult<Option<T>> {
+    match result.next() {
+        Some(row) => {
+            let obj = T::from_row(dbtry!(row));
+            assert!(result.next().is_none(), "Duplicate entry");
+            return Ok(Some(obj));
+        },
+        None => return Ok(None),
+    }
+}
+
 fn extract_one<T: DbObject>(result: &mut mysql::QueryResult) -> ListsResult<T> {
-    let row = dbtry!(result.next().ok_or(mysql::Error::IoError(
-        std::io::Error::new(std::io::ErrorKind::NotFound, "Empty result set. Expected one."))));
-    let obj = T::from_row(dbtry!(row));
-    assert!(result.next().is_none(), "Duplicate entry");
-    return Ok(obj);
+    match try!(extract_one_or_none(result)) {
+        Some(result) => return Ok(result),
+        None => return Err(ListsError::DoesNotExist),
+    }
 }
 
 fn to_vec<T: DbObject>(query_result: mysql::QueryResult) -> ListsResult<Vec<T>> {
@@ -213,15 +223,10 @@ impl Db {
         {
             // TODO: ignore (and clean up) expired leases.
             let mut result = dbtry!(txn.prep_exec("SELECT lists.work_queue.id, lists.work_queue.payload FROM lists.work_queue LEFT OUTER JOIN lists.work_leases ON lists.work_queue.id = lists.work_leases.item_id WHERE lists.work_leases.id IS NULL AND lists.work_queue.queue_name = ? ORDER BY id ASC LIMIT 1 FOR UPDATE", (queue_name,)));
-            // TODO: clean this up
-            // - We could get multiple results
-            // - We should validate the error
-            match extract_one::<DbWorkQueueTask>(&mut result) {
-                Ok(row) => task = row,
-                Err(err) => {
-                    println!("Swallowing error: {}", err);
-                    return Ok(None);
-                },
+
+            match try!(extract_one_or_none::<DbWorkQueueTask>(&mut result)) {
+                None => return Ok(None),
+                Some(t) => task = t,
             }
         }
 

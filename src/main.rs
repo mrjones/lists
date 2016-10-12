@@ -31,7 +31,8 @@ struct ServerContext {
 }
 
 impl ServerContext {
-    fn new(conn_pool: mysql::Pool) -> ServerContext {
+    fn new(conn_pool: mysql::Pool,
+           work_ready: std::sync::Arc<std::sync::Mutex<std::sync::mpsc::Sender<()>>>) -> ServerContext {
         let db = std::sync::Arc::new(std::sync::Mutex::new(
             data::Db{conn: Box::new(conn_pool)}));
         let workqueue = std::sync::Arc::new(std::sync::Mutex::new(
@@ -42,7 +43,7 @@ impl ServerContext {
         return ServerContext {
             db: db.clone(),
             streeteasy: streeteasy::StreetEasyClient::new(),
-            expander: annotations::AnnotationExpander::new(db, workqueue),
+            expander: annotations::AnnotationExpander::new(db, workqueue, work_ready),
         }
     }
 }
@@ -282,8 +283,11 @@ fn serve_rustful(port: u16) {
         }
     };
 
+    let (sender, receiver) = std::sync::mpsc::channel::<()>();
+
     let server_context = std::sync::Arc::new(ServerContext::new(
-        mysql::Pool::new("mysql://lists:lists@localhost").unwrap()));
+        mysql::Pool::new("mysql://lists:lists@localhost").unwrap(),
+        std::sync::Arc::new(std::sync::Mutex::new(sender))));
 
     let mut global = rustful::server::Global::default();
     global.insert(server_context.clone());
@@ -292,7 +296,8 @@ fn serve_rustful(port: u16) {
         println!("Worker thread running...");
         loop {
             server_context.expander.process_work_queue();
-            std::thread::sleep(std::time::Duration::new(1, 0));
+            let _ = receiver.recv_timeout(std::time::Duration::new(60, 0));
+//            std::thread::sleep(std::time::Duration::new(1, 0));
         }
     });
     
