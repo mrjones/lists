@@ -265,8 +265,8 @@ var List = React.createClass({
         var endpoint = "ws://" + window.location.hostname + ":2347";
         var update_conn = new WebSocket(endpoint);
         update_conn.onopen = function() {
-          update_conn.send("Hi!");
-        }
+          update_conn.send("watch:" + this.props.params.listId);
+        }.bind(this);
         update_conn.onmessage = function(e) {
           console.log("Got " + e.data + " from WS server");
         }
