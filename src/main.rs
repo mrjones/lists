@@ -20,11 +20,11 @@ mod workqueue;
 use model::*;
 use result::ListsError;
 use result::ListsResult;
+use rustful::server::Global;
 use std::hash::Hash;
 use std::hash::Hasher;
 
 struct ServerContext {
-//    conn_pool: Box<mysql::Pool>,
     db: std::sync::Arc<std::sync::Mutex<data::Db>>,
     streeteasy: streeteasy::StreetEasyClient,
     expander: annotations::AnnotationExpander,
@@ -218,7 +218,7 @@ impl rustful::Handler for Api {
                     .or_else(|e| e.ignore_send_error());
             },
             Api::LoggedOutHandler { ref handler } => {
-                let server_context : &ServerContext =
+                let server_context : &std::sync::Arc<ServerContext> =
                     context.global.get().expect("Couldn't get server_context");
                 match handler(server_context, context) {
                     Ok(obj) => response.send(rustc_serialize::json::encode(
@@ -227,7 +227,7 @@ impl rustful::Handler for Api {
                 }
             },
             Api::LoggedInHandler { ref handler } => {
-                let server_context : &ServerContext =
+                let server_context : &std::sync::Arc<ServerContext> =
                     context.global.get().expect("Couldn't get server_context");
 
                 let user_id = lookup_param::<i64>("user_id", &context).unwrap();
@@ -282,19 +282,33 @@ fn serve_rustful(port: u16) {
         }
     };
 
-    let server_context = ServerContext::new(
-        mysql::Pool::new("mysql://lists:lists@localhost").unwrap());
+    let server_context = std::sync::Arc::new(ServerContext::new(
+        mysql::Pool::new("mysql://lists:lists@localhost").unwrap()));
+
+    let mut global = rustful::server::Global::default();
+    global.insert(server_context.clone());
+
+    let worker_handle = std::thread::spawn(move || {
+        println!("Worker thread running...");
+        loop {
+            server_context.expander.process_work_queue();
+            std::thread::sleep(std::time::Duration::new(1, 0));
+        }
+    });
     
     match (rustful::Server{
         handlers: my_router,
-        global: Box::new(server_context).into(),
+        global: global,
         host: rustful::server::Host::any_v4(port),
         ..rustful::Server::default()
     }.run()) {
         Ok(_server) => println!("Serving rustful on port {}", port),
         Err(_) => println!("Could not start rustful server.")
     }
+
+    worker_handle.join().unwrap();
 }
+
 
 fn main() {
     serve_rustful(2346);

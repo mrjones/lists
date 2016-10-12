@@ -111,15 +111,39 @@ impl AnnotationExpander {
             workqueue: workqueue,
         }
     }
+
+    pub fn process_work_queue(&self) {
+        match self.workqueue.lock().unwrap().dequeue() {
+            Some((raw_task, _)) => {
+                let mut task = storage_format::RefreshStreetEasyTask::new();
+                task.merge_from_bytes(&raw_task.payload).unwrap();
+                println!("Got work: {:?}", task);
+
+                self.generate_streeteasy_annotation(
+                    task.get_item_id(), task.get_parent_id(), task.get_url());
+            },
+            None => {
+                println!("No work found");
+            },
+        }
+    }
     
     pub fn generate_auto_annotations(&self, item_id: i64, annotation_id: i64, kind: &str, body: &str) {
         if kind == "LINK" && body.contains("streeteasy.com") {
-            self.generate_streeteasy_annotation(item_id, annotation_id, body);
+            let mut task = storage_format::RefreshStreetEasyTask::new();
+            task.set_item_id(item_id);
+            task.set_parent_id(annotation_id);
+            task.set_url(body.to_string());
+
+            self.workqueue.lock().unwrap().enqueue(
+                &task.write_to_bytes().unwrap()).unwrap();
+//            self.generate_streeteasy_annotation(item_id, annotation_id, body);
         }
     }
 
     fn generate_streeteasy_annotation(&self, item_id: i64, parent_id: i64, url: &str) {
-        // TODO(mrjones): Do fetching asynchronously.
+        println!("Working on task: {}", url);
+        // TODO(mrjones): Update annotation if already exists
         let listing_result = self.se_client.lookup_listing(url);
         return match listing_result {
             Ok(listing) => {

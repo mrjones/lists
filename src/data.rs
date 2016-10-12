@@ -37,7 +37,7 @@ macro_rules! dbtry {
 
 fn extract_one<T: DbObject>(result: &mut mysql::QueryResult) -> ListsResult<T> {
     let row = dbtry!(result.next().ok_or(mysql::Error::IoError(
-        std::io::Error::new(std::io::ErrorKind::NotFound, "Couldn't extract one item."))));
+        std::io::Error::new(std::io::ErrorKind::NotFound, "Empty result set. Expected one."))));
     let obj = T::from_row(dbtry!(row));
     assert!(result.next().is_none(), "Duplicate entry");
     return Ok(obj);
@@ -211,22 +211,29 @@ impl Db {
 
         let task;
         {
-            let mut result = dbtry!(txn.prep_exec("SELECT id, payload FROM lists.work_queue.id LEFT OUTER JOIN lists.work_leases WHERE lists.work_leases.id IS NULL AND lists.work_queue.queue_name = ? FOR UPDATE", (queue_name,)));
-            task = try!(extract_one::<DbWorkQueueTask>(&mut result));
+            // TODO: ignore (and clean up) expired leases.
+            let mut result = dbtry!(txn.prep_exec("SELECT lists.work_queue.id, lists.work_queue.payload FROM lists.work_queue LEFT OUTER JOIN lists.work_leases ON lists.work_queue.id = lists.work_leases.item_id WHERE lists.work_leases.id IS NULL AND lists.work_queue.queue_name = ? ORDER BY id ASC LIMIT 1 FOR UPDATE", (queue_name,)));
+            // TODO: clean this up
+            // - We could get multiple results
+            // - We should validate the error
+            match extract_one::<DbWorkQueueTask>(&mut result) {
+                Ok(row) => task = row,
+                Err(err) => {
+                    println!("Swallowing error: {}", err);
+                    return Ok(None);
+                },
+            }
         }
-
-        // TODO: What if no work
-        
 
         let expiration = std::time::SystemTime::now() + lease_duration;
         let epoch_expiration = expiration.duration_since(std::time::UNIX_EPOCH).unwrap();
         {
             let _ = dbtry!(txn.prep_exec("INSERT INTO lists.work_leases (item_id, epoch_expiration) VALUES (?, ?)", (task.id, epoch_expiration)));
         }
-        
-        let mut lease;
+
+        let lease;
         {
-            let mut lease_result = dbtry!(txn.prep_exec("SELECT id, payload, lease_expiration FROM lists.work_leases WHERE id = LAST_INSERT_ID()", ()));
+            let mut lease_result = dbtry!(txn.prep_exec("SELECT lists.work_leases.id, lists.work_queue.payload, lists.work_leases.epoch_expiration FROM lists.work_leases JOIN lists.work_queue ON lists.work_queue.id = lists.work_leases.item_id WHERE lists.work_leases.id = LAST_INSERT_ID()", ()));
             lease = try!(extract_one(&mut lease_result));
         }
         let _ = dbtry!(txn.commit());

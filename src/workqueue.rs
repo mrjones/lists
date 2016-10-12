@@ -4,8 +4,8 @@ use data;
 use result; 
 
 pub struct Task {
-    id: i64,
-    payload: Vec<u8>,
+    pub id: i64,
+    pub payload: Vec<u8>,
 }
 
 pub trait WorkQueue {
@@ -37,17 +37,22 @@ impl DbWorkQueue {
 
 impl WorkQueue for DbWorkQueue {
     fn enqueue(&self, payload: &[u8]) -> result::ListsResult<()> {
+        println!("workqueue.enqueue");
         return self.db.lock().unwrap().enqueue_work(&self.queue_name, payload);
     }
 
     fn dequeue(&self) -> Option<(Task, std::time::SystemTime)> {
+        println!("workqueue.dequeue");
         match self.db.lock().unwrap().dequeue_work(
-            &self.queue_name, self.lease_duration).unwrap_or(None) {
+            &self.queue_name, self.lease_duration).unwrap() {
             None => return None,
-            Some(lease) => return Some((Task{
-                id: lease.id,
-                payload: lease.payload
-            }, lease.expiration)),
+            Some(lease) => {
+                println!("Dequeued task: {}", lease.id);
+                return Some((Task{
+                    id: lease.id,
+                    payload: lease.payload
+                }, lease.expiration));
+            },
         }
     }
 

@@ -5,6 +5,8 @@
 
 USE lists;
 
+DROP TABLE IF EXISTS work_leases;
+DROP TABLE IF EXISTS work_queue;
 DROP TABLE IF EXISTS item_auto_annotations;
 DROP TABLE IF EXISTS item_annotations;
 DROP TABLE IF EXISTS items;
@@ -67,11 +69,13 @@ CREATE TABLE work_queue (
        id BIGINT NOT NULL AUTO_INCREMENT,
        queue_name VARCHAR(255),
        payload BLOB,
+       PRIMARY KEY(id)
 );
 
 CREATE TABLE work_leases (
        id BIGINT NOT NULL AUTO_INCREMENT,
        item_id BIGINT,
        epoch_expiration BIGINT,
-       FOREIGN KEY(item_id) REFERENCES work_queue(id),
+       PRIMARY KEY(id),
+       FOREIGN KEY(item_id) REFERENCES work_queue(id)
 );
