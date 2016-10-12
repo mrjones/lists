@@ -4,6 +4,7 @@ extern crate protobuf;
 extern crate rustful;
 extern crate rustc_serialize;
 extern crate url;
+extern crate websocket;
 
 use rustc_serialize::json::ToJson;
 
@@ -20,6 +21,9 @@ mod workqueue;
 use model::*;
 use result::ListsError;
 use result::ListsResult;
+use std::borrow::Borrow;
+use websocket::Sender;
+use websocket::Receiver;
 
 struct ServerContext {
     db: std::sync::Arc<std::sync::Mutex<data::Db>>,
@@ -240,6 +244,58 @@ impl rustful::Handler for Api {
     }
 }
 
+fn serve_websockets(port: u16) {
+    std::thread::spawn(move || {
+        let server = websocket::Server::bind(("0.0.0.0", port)).unwrap();
+        println!("Serving websockets on port {}", port);
+        for connection in server {
+            std::thread::spawn(move || {
+                let request = connection.unwrap().read_request().unwrap();
+                let mut client = request.accept().send().unwrap();
+
+                let ip = client.get_mut_sender()
+                    .get_mut().peer_addr().unwrap();
+                println!("Connection from {}", ip);
+
+                let (mut sender, mut receiver) = client.split();
+
+                for message in receiver.incoming_messages() {
+                    if message.is_err() {
+                        println!("Ignoring error {}", message.unwrap_err());
+                        continue;
+                    }
+                    let message : websocket::Message = message.unwrap();
+                    match message.opcode {
+                        websocket::message::Type::Close => {
+                            sender.send_message(
+                                &websocket::Message::close()).unwrap();
+                            println!("Closed connection to {}", ip);
+                            return;
+                        },
+                        websocket::message::Type::Ping => {
+                            sender.send_message(
+                                &websocket::Message::pong(message.payload)).unwrap();
+                            println!("Ping from {}", ip);
+                        },
+                        websocket::message::Type::Pong => {
+                            println!("Pong from {}", ip);
+                        },
+                        websocket::message::Type::Text => {
+                            let payload : &[u8]= message.payload.borrow();
+                            println!("Text from {}: {}", ip, std::str::from_utf8(payload).unwrap());
+                            sender.send_message(
+                                &websocket::Message::text("Got it!")).unwrap();
+                        },
+                        websocket::message::Type::Binary => {
+                            println!("Binary from {}: {:?}", ip, message.payload);
+                        },
+                    }
+                }
+            });
+        }
+    });
+}
+
 fn serve_rustful(port: u16) {
     let my_router = insert_routes!{
         rustful::TreeRouter::new() => {
@@ -287,7 +343,7 @@ fn serve_rustful(port: u16) {
     let mut global = rustful::server::Global::default();
     global.insert(server_context.clone());
 
-    let worker_handle = std::thread::spawn(move || {
+    std::thread::spawn(move || {
         println!("Worker thread running...");
         loop {
             server_context.expander.process_work_queue();
@@ -305,11 +361,10 @@ fn serve_rustful(port: u16) {
         Ok(_server) => println!("Serving rustful on port {}", port),
         Err(_) => println!("Could not start rustful server.")
     }
-
-    worker_handle.join().unwrap();
 }
 
 
 fn main() {
+    serve_websockets(2347);
     serve_rustful(2346);
 }

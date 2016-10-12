@@ -260,6 +260,16 @@ var List = React.createClass({
       cache: false,
       success: function(data) {
         this.setState({name: data.name, items: data.items});
+
+        // TODO(mrjones): Negotiate the host / port?
+        var endpoint = "ws://" + window.location.hostname + ":2347";
+        var update_conn = new WebSocket(endpoint);
+        update_conn.onopen = function() {
+          update_conn.send("Hi!");
+        }
+        update_conn.onmessage = function(e) {
+          console.log("Got " + e.data + " from WS server");
+        }
       }.bind(this),
       error: function(xhr, status, err) {
         console.error("url", status, err.toString());        
