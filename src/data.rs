@@ -5,10 +5,7 @@ extern crate mysql;
 use model::DbObject;
 use model::DbWorkQueueLease;
 use model::DbWorkQueueTask;
-use model::FullItem;
-use model::FullLinkAnnotation;
 use model::FullList;
-use model::FullTextAnnotation;
 use model::Annotation;
 use model::AutoAnnotation;
 use model::Item;
@@ -74,28 +71,6 @@ impl Db {
     pub fn lookup_user(&self, id: i64) -> ListsResult<User> {
         let mut result = dbtry!(self.conn.prep_exec("SELECT id, name FROM lists.users WHERE id = ?", (id,)));
         return extract_one(&mut result);
-    }
-
-    fn append_annotation(item: &mut FullItem, db_annotation: &DbAnnotation) {
-        match db_annotation.kind.as_str() {
-            "LINK" => {
-                item.link_annotations.push(
-                    FullLinkAnnotation{
-                        url: db_annotation.body.clone(),
-                        id: db_annotation.id,
-                    }
-                );
-            },
-            "TEXT" => {
-                item.text_annotations.push(
-                    FullTextAnnotation{
-                        text: db_annotation.body.clone(),
-                        id: db_annotation.id,
-                    }
-                );
-            },
-            _ => println!("Ignoring annotation: {:?}", db_annotation),
-        }
     }
 
     // TODO(mrjones): Clean up the return type

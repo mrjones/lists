@@ -17,6 +17,7 @@ pub enum ListsError {
     JsonEncodeError(rustc_serialize::json::EncoderError),
     SystemTimeError(std::time::SystemTimeError),
     
+    #[allow(dead_code)]
     Unknown(String),
 }
 

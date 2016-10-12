@@ -117,24 +117,8 @@ pub struct AutoAnnotation {
     pub mtime: chrono::NaiveDateTime,
 }
 
-use mysql::conn::ColumnIndex;
-
 impl DbObject for AutoAnnotation {
-    fn from_row(mut row: mysql::Row) -> AutoAnnotation {
-/*
-        println!("ROW {:?}", row.unwrap());
-            
-        return AutoAnnotation {
-            id: 1,
-            item_id: 1,
-            parent_id: 1,
-            kind: "foo".to_string(),
-            body: vec![],
-            mtime: chrono::NaiveDateTime::new(
-                chrono::NaiveDate::from_ymd(2016, 10, 16),
-                chrono::NaiveTime::from_hms(12, 0, 0)),
-        };
-*/
+    fn from_row(row: mysql::Row) -> AutoAnnotation {
         let (id, item_id, parent_id, kind, body, mtime) = mysql::from_row(row);
         return AutoAnnotation {
             id: id,

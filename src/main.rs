@@ -20,13 +20,9 @@ mod workqueue;
 use model::*;
 use result::ListsError;
 use result::ListsResult;
-use rustful::server::Global;
-use std::hash::Hash;
-use std::hash::Hasher;
 
 struct ServerContext {
     db: std::sync::Arc<std::sync::Mutex<data::Db>>,
-    streeteasy: streeteasy::StreetEasyClient,
     expander: annotations::AnnotationExpander,
 }
 
@@ -42,7 +38,6 @@ impl ServerContext {
                 db.clone())));
         return ServerContext {
             db: db.clone(),
-            streeteasy: streeteasy::StreetEasyClient::new(),
             expander: annotations::AnnotationExpander::new(db, workqueue, work_ready),
         }
     }

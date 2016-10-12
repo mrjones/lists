@@ -17,6 +17,7 @@ pub trait Cache {
 }
 
 pub enum ExpirationPolicy {
+    #[allow(dead_code)]
     Never,
     After(std::time::Duration),
 }
@@ -29,22 +30,6 @@ struct RealClock;
 impl Clock for RealClock {
     fn now(&self) -> std::time::SystemTime {
         return std::time::SystemTime::now();
-    }
-}
-
-struct FakeClock {
-    time: std::time::SystemTime,
-}
-impl FakeClock {
-    fn new() -> FakeClock {
-        return FakeClock{
-            time: std::time::SystemTime::now(),
-        };
-    }
-}
-impl Clock for FakeClock {
-    fn now(&self) -> std::time::SystemTime {
-        return self.time;
     }
 }
 
@@ -169,6 +154,7 @@ pub struct MemoryCache {
 }
 
 impl MemoryCache {
+    #[allow(dead_code)]
     fn new() -> MemoryCache {
         return MemoryCache {
             data: std::sync::Mutex::new(std::collections::HashMap::new()),
@@ -230,7 +216,6 @@ mod tests {
     use super::Clock;
     use super::FileCache;
     use super::ExpirationPolicy;
-    use super::FakeClock;
     use super::MemoryCache;
     
     const CACHE_DIR: &'static str = "/tmp/cache.test/";
@@ -241,6 +226,22 @@ mod tests {
         cache: Box<Cache>,
         clock: std::sync::Arc<std::sync::Mutex<FakeClock>>,
         debug_label: &'static str,
+    }
+
+    struct FakeClock {
+        time: std::time::SystemTime,
+    }
+    impl FakeClock {
+        fn new() -> FakeClock {
+            return FakeClock{
+                time: std::time::SystemTime::now(),
+            };
+        }
+    }
+    impl Clock for FakeClock {
+        fn now(&self) -> std::time::SystemTime {
+            return self.time;
+        }
     }
 
     fn new_memory_cache() -> CacheHandle {
