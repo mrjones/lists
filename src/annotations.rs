@@ -12,6 +12,12 @@ use protobuf::Message;
 use std::hash::Hash;
 use std::hash::Hasher;
 
+#[derive(Debug)]
+pub struct ItemUpdate {
+    pub list_id: i64,
+    pub item_id: i64,
+}
+
 fn attach_user_annotation(item: &mut model::FullItem, user_annotation: &model::Annotation) {
     match user_annotation.kind.as_str() {
         "LINK" => {
@@ -102,35 +108,52 @@ pub struct AnnotationExpander {
     se_client: streeteasy::StreetEasyClient,
     workqueue: std::sync::Arc<std::sync::Mutex<workqueue::WorkQueue + std::marker::Send>>,
     work_ready: std::sync::Arc<std::sync::Mutex<std::sync::mpsc::Sender<()>>>,
+    item_updated: std::sync::Arc<std::sync::Mutex<std::sync::mpsc::Sender<ItemUpdate>>>,
 }
 
 impl AnnotationExpander {
     pub fn new(db: std::sync::Arc<std::sync::Mutex<data::Db>>,
                workqueue: std::sync::Arc<std::sync::Mutex<workqueue::WorkQueue + std::marker::Send>>,
-               work_ready: std::sync::Arc<std::sync::Mutex<std::sync::mpsc::Sender<()>>>) -> AnnotationExpander {
+               work_ready: std::sync::Arc<std::sync::Mutex<std::sync::mpsc::Sender<()>>>,
+               item_updated: std::sync::Arc<std::sync::Mutex<std::sync::mpsc::Sender<ItemUpdate>>>) -> AnnotationExpander {
         return AnnotationExpander{
             db: db,
             se_client: streeteasy::StreetEasyClient::new(),
             workqueue: workqueue,
             work_ready: work_ready,
+            item_updated: item_updated,
         }
     }
 
-    fn finish_task<T>(&self, result: result::ListsResult<T>, task: &workqueue::Task) {
+    fn finish_task<T: std::fmt::Debug>(&self, list_id: i64, item_id: i64, result: result::ListsResult<T>, task: &workqueue::Task) {
+        println!("Finished task (l:{}, i:{}) with result {:?}", list_id, item_id, result);
         match result {
-            Ok(_) => self.workqueue.lock().unwrap().finish(task.id).unwrap(),
+            Ok(_) => {
+                println!("Updating workqueue...");
+                self.workqueue.lock().unwrap().finish(task.id).unwrap();
+                let iu = ItemUpdate{
+                    list_id: list_id,
+                    item_id: item_id,
+                };
+                println!("Pusing notification: {:?}", iu);
+                self.item_updated.lock().unwrap().send(iu).unwrap();
+                println!("Task success. Updated workqueue and pushed a notification");
+            },
             Err(_) => self.workqueue.lock().unwrap().abort(task.id).unwrap(),
         }
     }
     
     pub fn process_work_queue(&self) {
-        match self.workqueue.lock().unwrap().dequeue() {
+        let res = self.workqueue.lock().unwrap().dequeue();
+        match res {
             Some((raw_task, _)) => {
                 let mut task = storage_format::RefreshStreetEasyTask::new();
                 task.merge_from_bytes(&raw_task.payload).unwrap();
                 println!("Got work: {:?}", task);
                 
                 self.finish_task(
+                    task.get_list_id(),
+                    task.get_item_id(),
                     self.generate_streeteasy_annotation(
                         task.get_item_id(), task.get_parent_id(), task.get_url()),
                     &raw_task);
@@ -141,9 +164,10 @@ impl AnnotationExpander {
         }
     }
     
-    pub fn generate_auto_annotations(&self, item_id: i64, annotation_id: i64, kind: &str, body: &str) {
+    pub fn generate_auto_annotations(&self, list_id: i64, item_id: i64, annotation_id: i64, kind: &str, body: &str) {
         if kind == "LINK" && body.contains("streeteasy.com") {
             let mut task = storage_format::RefreshStreetEasyTask::new();
+            task.set_list_id(list_id);
             task.set_item_id(item_id);
             task.set_parent_id(annotation_id);
             task.set_url(body.to_string());

@@ -7,7 +7,7 @@ use websocket::Receiver;
 
 pub struct StreamManager {
     port: u16,
-    streams: std::collections::HashMap<i64, std::sync::Arc<OneStream>>,
+    streams: std::sync::Mutex<std::collections::HashMap<i64, std::sync::Arc<OneStream>>>,
     next_id: std::sync::Mutex<i64>,
 }
 
@@ -15,7 +15,7 @@ impl StreamManager {
     pub fn new(port: u16) -> StreamManager {
         return StreamManager{
             port: port,
-            streams: std::collections::HashMap::new(),
+            streams: std::sync::Mutex::new(std::collections::HashMap::new()),
             next_id: std::sync::Mutex::new(0),
         };
     }    
@@ -26,15 +26,25 @@ impl StreamManager {
         *id += 1;
         return ret;
     }
+
+    pub fn notify_observers(&self, list_id: i64, message: &str) {
+        println!("Got a message for {}", list_id);
+        for (_, stream) in self.streams.lock().unwrap().iter() {
+            println!("Stream {} is watching {}", stream.id, list_id);
+            if *stream.watch_target.lock().unwrap() == Some(list_id) {
+                stream.send_message(message);
+            }
+        }
+    }
     
-    pub fn serve(&mut self) {
+    pub fn serve(&self) {
         let server = websocket::Server::bind(("0.0.0.0", self.port)).unwrap();
         println!("Serving websockets on port {}", self.port);
         for connection in server {
             let id = self.next_id();
             let stream = std::sync::Arc::new(
                 OneStream::handle(id, connection.unwrap()));
-            self.streams.insert(id, stream.clone());
+            self.streams.lock().unwrap().insert(id, stream.clone());
             std::thread::spawn(move || {
                 stream.process_incoming();
             });
@@ -69,6 +79,12 @@ impl OneStream {
             receiver: std::sync::Mutex::new(receiver),
             watch_target: std::sync::Mutex::new(None),
         }
+    }
+
+    fn send_message(&self, payload: &str) {
+        println!("Pusing message to socket: {}", payload);
+        self.sender.lock().unwrap().send_message(
+            &websocket::Message::text(payload)).unwrap();
     }
 
     fn process_text(&self, payload_bytes: &[u8]) {

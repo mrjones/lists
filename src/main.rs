@@ -23,15 +23,17 @@ use model::*;
 use result::ListsError;
 use result::ListsResult;
 
-
 struct ServerContext {
     db: std::sync::Arc<std::sync::Mutex<data::Db>>,
     expander: annotations::AnnotationExpander,
+    stream_manager: std::sync::Arc<streaming::StreamManager>,
 }
 
 impl ServerContext {
     fn new(conn_pool: mysql::Pool,
-           work_ready: std::sync::Arc<std::sync::Mutex<std::sync::mpsc::Sender<()>>>) -> ServerContext {
+           work_ready: std::sync::Arc<std::sync::Mutex<std::sync::mpsc::Sender<()>>>,
+           item_updated: std::sync::Arc<std::sync::Mutex<std::sync::mpsc::Sender<annotations::ItemUpdate>>>,
+           stream_manager: std::sync::Arc<streaming::StreamManager>) -> ServerContext {
         let db = std::sync::Arc::new(std::sync::Mutex::new(
             data::Db{conn: Box::new(conn_pool)}));
         let workqueue = std::sync::Arc::new(std::sync::Mutex::new(
@@ -41,7 +43,9 @@ impl ServerContext {
                 db.clone())));
         return ServerContext {
             db: db.clone(),
-            expander: annotations::AnnotationExpander::new(db, workqueue, work_ready),
+            expander: annotations::AnnotationExpander::new(
+                db, workqueue, work_ready, item_updated),
+            stream_manager: stream_manager,
         }
     }
 }
@@ -185,7 +189,7 @@ fn add_annotation(server_context: &ServerContext, _: &User, mut context: rustful
     let saved_annotation = try!(server_context.db.lock().unwrap().add_annotation(item_id, &annotation.kind, &annotation.body));
 
     server_context.expander.generate_auto_annotations(
-        item_id, saved_annotation.id,
+        list_id, item_id, saved_annotation.id,
         &saved_annotation.kind, &saved_annotation.body);
 
     let (item, user_annotations, auto_annotations) =
@@ -243,15 +247,17 @@ impl rustful::Handler for Api {
     }
 }
 
-fn serve_websockets(port: u16) {
-    let manager = std::sync::Arc::new(std::sync::Mutex::new(
-        streaming::StreamManager::new(port)));
+fn serve_websockets(
+     stream_manager: std::sync::Arc<streaming::StreamManager>) {
     std::thread::spawn(move || {
-        manager.lock().unwrap().serve();
+        stream_manager.serve();
     });
 }
 
-fn serve_rustful(port: u16) {
+fn serve_rustful(
+    port: u16,
+    stream_manager: std::sync::Arc<streaming::StreamManager>) {
+    
     let my_router = insert_routes!{
         rustful::TreeRouter::new() => {
             Get: Api::StaticFile{filename: "static/index.html"},
@@ -289,21 +295,35 @@ fn serve_rustful(port: u16) {
         }
     };
 
-    let (sender, receiver) = std::sync::mpsc::channel::<()>();
+    let (work_sender, work_receiver) = std::sync::mpsc::channel::<()>();
+    let (item_updated_sender, item_updated_receiver) =
+        std::sync::mpsc::channel::<annotations::ItemUpdate>();
 
     let server_context = std::sync::Arc::new(ServerContext::new(
         mysql::Pool::new("mysql://lists:lists@localhost").unwrap(),
-        std::sync::Arc::new(std::sync::Mutex::new(sender))));
+        std::sync::Arc::new(std::sync::Mutex::new(work_sender)),
+        std::sync::Arc::new(std::sync::Mutex::new(item_updated_sender)),
+        stream_manager));
 
     let mut global = rustful::server::Global::default();
     global.insert(server_context.clone());
 
+    let sc = server_context.clone();
     std::thread::spawn(move || {
         println!("Worker thread running...");
         loop {
-            server_context.expander.process_work_queue();
-            let _ = receiver.recv_timeout(std::time::Duration::new(60, 0));
-//            std::thread::sleep(std::time::Duration::new(1, 0));
+            sc.expander.process_work_queue();
+            let _ = work_receiver.recv_timeout(std::time::Duration::new(60, 0));
+        }
+    });
+
+    std::thread::spawn(move || {
+        println!("Stream relay thread running...");
+        loop {
+            let update = item_updated_receiver.recv();
+            println!("Relay thread passing on {:?}", update);
+            server_context.stream_manager.notify_observers(
+                update.unwrap().list_id, "Your list was updated!");
         }
     });
     
@@ -320,6 +340,8 @@ fn serve_rustful(port: u16) {
 
 
 fn main() {
-    serve_websockets(2347);
-    serve_rustful(2346);
+    let stream_manager = std::sync::Arc::new(
+        streaming::StreamManager::new(2347));
+    serve_websockets(stream_manager.clone());
+    serve_rustful(2346, stream_manager);
 }

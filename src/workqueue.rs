@@ -65,6 +65,7 @@ impl WorkQueue for DbWorkQueue {
     }
 
     fn finish(&self, id: i64) -> result::ListsResult<()> {
+        println!("Workqueue finish {}" , id);
         return self.db.lock().unwrap().finish_task(id);
     }
 }

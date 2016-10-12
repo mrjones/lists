@@ -237,6 +237,7 @@ impl Db {
     }
 
     pub fn finish_task(&self, id: i64) -> ListsResult<()> {
+        println!("DB finish_task {}" , id);
         let mut conn = self.conn.get_conn().unwrap();
         let mut txn = dbtry!(conn.start_transaction(true, None, None));
         let item_id;
