@@ -40,7 +40,7 @@ const PARSE_CACHE_NAMESPACE: &'static str = "PARSE";
 
 impl StreetEasyClient {
     pub fn new() -> StreetEasyClient {
-        let cache_dir = "/home/mrjones/lists.cache/".to_string();
+        let cache_dir = "~/lists.cache/".to_string();
         std::fs::create_dir_all(cache_dir.clone()).unwrap();
 
         return StreetEasyClient{

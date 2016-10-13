@@ -2,6 +2,7 @@ extern crate hyper;
 extern crate mysql;
 extern crate rustc_serialize;
 extern crate std;
+extern crate websocket;
 
 pub type ListsResult<T> = Result<T, ListsError>;
 
@@ -16,6 +17,7 @@ pub enum ListsError {
     JsonDecodeError(rustc_serialize::json::DecoderError),
     JsonEncodeError(rustc_serialize::json::EncoderError),
     SystemTimeError(std::time::SystemTimeError),
+    WebSocketError(websocket::result::WebSocketError),
     
     #[allow(dead_code)]
     Unknown(String),
@@ -53,7 +55,10 @@ impl std::fmt::Display for ListsError {
             },
             ListsError::SystemTimeError(ref err) => {
                 try!(write!(f, "SystemTime Error: {}", err));
-            }
+            },
+            ListsError::WebSocketError(ref err) => {
+                try!(write!(f, "WebSocketError: {}", err));
+            },
 
         }
 
@@ -74,6 +79,7 @@ impl std::error::Error for ListsError {
             ListsError::JsonDecodeError(_) => "JsonDecodeError",
             ListsError::JsonEncodeError(_) => "JsonEncodeError",
             ListsError::SystemTimeError(_) => "SystemTimeError",
+            ListsError::WebSocketError(_) => "WebSocketError",
         }
     }
 
@@ -113,6 +119,12 @@ impl std::convert::From<rustc_serialize::json::EncoderError> for ListsError {
 impl std::convert::From<std::time::SystemTimeError> for ListsError {
     fn from(err: std::time::SystemTimeError) -> ListsError {
         return ListsError::SystemTimeError(err);
+    }
+}
+
+impl std::convert::From<websocket::result::WebSocketError> for ListsError {
+    fn from(err: websocket::result::WebSocketError) -> ListsError {
+        return ListsError::WebSocketError(err);
     }
 }
 

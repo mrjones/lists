@@ -1,6 +1,7 @@
 extern crate std;
 extern crate websocket;
 
+use result;
 use std::borrow::Borrow;
 use websocket::Sender;
 use websocket::Receiver;
@@ -36,18 +37,28 @@ impl StreamManager {
             }
         }
     }
+
+    fn serve_connection(&self, connection: std::io::Result<WebSocketConnection>) -> result::ListsResult<()> {
+        let id = self.next_id();
+        let connection = try!(connection);
+        let stream = try!(OneStream::handle(id, connection));
+        let arc_stream = std::sync::Arc::new(stream);
+        self.streams.lock().unwrap().insert(id, arc_stream.clone());
+        std::thread::spawn(move || {
+            arc_stream.process_incoming();
+        });
+        
+        return Ok(());
+    }
     
     pub fn serve(&self) {
         let server = websocket::Server::bind(("0.0.0.0", self.port)).unwrap();
         println!("Serving websockets on port {}", self.port);
         for connection in server {
-            let id = self.next_id();
-            let stream = std::sync::Arc::new(
-                OneStream::handle(id, connection.unwrap()));
-            self.streams.lock().unwrap().insert(id, stream.clone());
-            std::thread::spawn(move || {
-                stream.process_incoming();
-            });
+            match self.serve_connection(connection) {
+                Ok(()) => (),
+                Err(err) => println!("Error accepting websocket: {}", err),
+            }
         }
     }
 }
@@ -66,19 +77,19 @@ struct OneStream {
 }
 
 impl OneStream {
-    fn handle(id: i64, connection: WebSocketConnection) -> OneStream {
-        let request = connection.read_request().unwrap();
-        let mut client = request.accept().send().unwrap(); 
-        let ip = client.get_mut_sender().get_mut().peer_addr().unwrap();
+    fn handle(id: i64, connection: WebSocketConnection) -> result::ListsResult<OneStream> {
+        let request = try!(connection.read_request());
+        let mut client = try!(request.accept().send());
+        let ip = try!(client.get_mut_sender().get_mut().peer_addr());
         let (sender, receiver) = client.split();
         println!("Connection with {}", ip);
-        return OneStream{
+        return Ok(OneStream{
             id: id,
             ip: ip,
             sender: std::sync::Mutex::new(sender),
             receiver: std::sync::Mutex::new(receiver),
             watch_target: std::sync::Mutex::new(None),
-        }
+        });
     }
 
     fn send_message(&self, payload: &str) {
