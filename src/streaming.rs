@@ -109,10 +109,7 @@ impl OneStream {
         let new_target = argument.parse::<i64>().unwrap();
         *self.watch_target.lock().unwrap() = Some(new_target);
 
-        println!("{} watching {:?}", self.id, *self.watch_target.lock().unwrap());
-        
-        self.sender.lock().unwrap().send_message(
-            &websocket::Message::text("Got it!")).unwrap();
+        println!("{} is now watching {:?}", self.id, *self.watch_target.lock().unwrap());
     }
     
     fn process_incoming(&self) {

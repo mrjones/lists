@@ -50,18 +50,13 @@ var App = React.createClass({
 
 var ListItem = React.createClass({
   getInitialState: function() {
-    return this.stateForItem(this.props.data);
-  },
-  stateForItem: function(itemData) {
     return {
       addingLinkAnnotation: false,
       pendingLinkAnnotation: '',
       addingTextAnnotations: false,
-      pendingTextAnnotation: '',
-      linkAnnotations: itemData.link_annotations,
-      streetEasyAnnotations: itemData.streeteasy_annotations,
-      textAnnotations: itemData.text_annotations,
-    };
+      pendingTextAnnotation: ''
+    }
+    return this.stateForItem(this.props.data);
   },
   delete: function() {
     this.props.deleteFn(this.props.data.id);
@@ -76,7 +71,8 @@ var ListItem = React.createClass({
       data: JSON.stringify(annotationObj),
       success: function(data) {
         console.log("posted new annotation. got respnse: " + JSON.stringify(data));
-        this.setState(this.stateForItem(data));
+        this.props.itemUpdatedFn(data);
+//        this.setState(this.stateForItem(data));
       }.bind(this),
       error: function(xhr, status, err) {
         console.error(url, status, err.toString());
@@ -106,7 +102,7 @@ var ListItem = React.createClass({
     this.setState({addingLinkAnnotation: false, pendingLinkAnnotation: ''});
   },
   render: function() {
-    var linkNodes = this.state.linkAnnotations.map(function(link) {
+    var linkNodes = this.props.data.link_annotations.map(function(link) {
       return (
         <div key={link.url}>
           <a href={link.url}>{link.url}</a>
@@ -114,7 +110,7 @@ var ListItem = React.createClass({
       )
     });
 
-    var streetEasyNodes = this.state.streetEasyAnnotations.map(function(listing) {
+    var streetEasyNodes = this.props.data.streeteasy_annotations.map(function(listing) {
       return (
         <div key={listing.hash}>
           Price: ${listing.price_usd}
@@ -122,7 +118,7 @@ var ListItem = React.createClass({
       );
     });
 
-    var textNodes = this.state.textAnnotations.map(function(text) {
+    var textNodes = this.props.data.text_annotations.map(function(text) {
       return (
         <div key={text.id}>
           {text.text}
@@ -253,6 +249,29 @@ var List = React.createClass({
       return item.id != id;
     })});
   },
+  itemUpdateReceived: function(e) {
+    console.log("Got " + e.data + " from WS server");
+    this.handleItemUpdate(JSON.parse(e.data));
+  },
+  handleItemUpdate: function(json_data) {
+    var new_item = json_data
+    var new_items = this.state.items.map(function(old_item) {
+      console.log("COMPARIING: " + JSON.stringify(old_item) + " vs. " + JSON.stringify(new_item));
+      if (old_item.id == new_item.id) {
+        console.log("new");
+        return new_item;
+      } else {
+        console.log("old");
+        return old_item;
+      }
+    });
+
+    console.log("new items: " + JSON.stringify(new_items));
+    this.setState({items: new_items}, function() {
+      console.log("Mutation applied");
+      console.log(JSON.stringify(this.state));
+    });
+  },
   componentDidMount: function() {
     $.ajax({
       url: `/lists/${this.props.params.userId}/list/${this.props.params.listId}`,
@@ -267,9 +286,7 @@ var List = React.createClass({
         update_conn.onopen = function() {
           update_conn.send("watch:" + this.props.params.listId);
         }.bind(this);
-        update_conn.onmessage = function(e) {
-          console.log("Got " + e.data + " from WS server");
-        }
+        update_conn.onmessage = this.itemUpdateReceived;
       }.bind(this),
       error: function(xhr, status, err) {
         console.error("url", status, err.toString());        
@@ -279,7 +296,7 @@ var List = React.createClass({
   render: function() {
     var itemNodes = this.state.items.map(function(item) {
       return (
-        <ListItem data={item} key={item.id} deleteFn={this.deleteItem} userId={this.props.params.userId} listId={this.props.params.listId}/>
+        <ListItem data={item} key={item.id} deleteFn={this.deleteItem} userId={this.props.params.userId} listId={this.props.params.listId} itemUpdatedFn={this.handleItemUpdate}/>
       );
     }.bind(this));
     return (

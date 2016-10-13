@@ -320,10 +320,21 @@ fn serve_rustful(
     std::thread::spawn(move || {
         println!("Stream relay thread running...");
         loop {
-            let update = item_updated_receiver.recv();
+            let update = item_updated_receiver.recv().unwrap();
             println!("Relay thread passing on {:?}", update);
+
+            let (item, user_annotations, auto_annotations) =
+                server_context.db.lock().unwrap().lookup_list_item(
+                    update.list_id, update.item_id).unwrap();
+    
+            let complete_item = annotations::parse_and_attach_annotations_single(
+                item, user_annotations, auto_annotations);
+
+            let update_text = rustc_serialize::json::encode(
+                        &complete_item.to_json()).unwrap();
+            
             server_context.stream_manager.notify_observers(
-                update.unwrap().list_id, "Your list was updated!");
+                update.list_id, &update_text);
         }
     });
     
