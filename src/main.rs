@@ -14,6 +14,7 @@ mod data;
 mod model;
 mod result;
 mod scrape;
+mod sockets_api;
 mod storage_format;
 mod streaming;
 mod streeteasy;

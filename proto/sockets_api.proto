@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+//message Request {
+//  oneof request {
+//    WatchListRequest watch_list_request = 1;
+//  }
+//}
+
+message Request {
+  int64 watch_list_id = 1;
+}

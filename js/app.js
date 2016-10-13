@@ -1,3 +1,5 @@
+var sockets_api = require('./sockets_api_pb.js');
+
 var UserPicker = React.createClass({
   getInitialState : function() {
     return {users: []};
@@ -284,7 +286,13 @@ var List = React.createClass({
         var endpoint = "ws://" + window.location.hostname + ":2347";
         var update_conn = new WebSocket(endpoint);
         update_conn.onopen = function() {
-          update_conn.send("watch:" + this.props.params.listId);
+          var request = new sockets_api.Request();
+          request.setWatchListId(this.props.params.listId);
+//          var request = new sockets_api.Request();
+//          request.setWatchListRequest(watchListRequest);
+          console.log("Serialized: " + request.serializeBinary());
+          update_conn.send(request.serializeBinary());
+//          update_conn.send("watch:" + this.props.params.listId);
         }.bind(this);
         update_conn.onmessage = this.itemUpdateReceived;
       }.bind(this),

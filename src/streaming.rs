@@ -1,7 +1,10 @@
+extern crate protobuf;
 extern crate std;
 extern crate websocket;
 
+use protobuf::Message;
 use result;
+use sockets_api;
 use std::borrow::Borrow;
 use websocket::Sender;
 use websocket::Receiver;
@@ -98,10 +101,11 @@ impl OneStream {
             &websocket::Message::text(payload)).unwrap();
     }
 
-    fn process_text(&self, payload_bytes: &[u8]) {
+    fn process_payload(&self, payload_bytes: &[u8]) {
+        /*
         let payload = std::str::from_utf8(payload_bytes).unwrap();
         println!("Text from {}: {}", self.ip, payload);
-                    
+
         // TODO: use a proto
         let parts: Vec<&str> = payload.split(":").collect();
         if parts.len() != 2 {
@@ -118,7 +122,14 @@ impl OneStream {
 
         assert_eq!(command, "watch");
         let new_target = argument.parse::<i64>().unwrap();
-        *self.watch_target.lock().unwrap() = Some(new_target);
+         */
+
+        let mut request = sockets_api::Request::new();
+        request.merge_from_bytes(payload_bytes).unwrap();
+        if request.has_watch_list_id() {
+            *self.watch_target.lock().unwrap() =
+                Some(request.get_watch_list_id());
+        }
 
         println!("{} is now watching {:?}", self.id, *self.watch_target.lock().unwrap());
     }
@@ -144,10 +155,11 @@ impl OneStream {
                 },
                 websocket::message::Type::Text => {
                     let payload_bytes: &[u8] = message.payload.borrow();
-                    self.process_text(payload_bytes);
+                    self.process_payload(payload_bytes);
                 },
                 websocket::message::Type::Binary => {
-                    println!("Binary from {}: {:?}", self.ip, message.payload);
+                    let payload_bytes: &[u8] = message.payload.borrow();
+                    self.process_payload(payload_bytes);
                 },
             }
         }
