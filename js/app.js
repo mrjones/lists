@@ -113,9 +113,25 @@ var ListItem = React.createClass({
     });
 
     var streetEasyNodes = this.props.data.streeteasy_annotations.map(function(listing) {
+      var openHouseNodes;
+
+      if (listing.open_houses.length > 0) {
+        var openHouseItems = listing.open_houses.map(function(open_house) {
+          return <li key={open_house}>{open_house}</li>;
+        });
+        var openHouseNodes = (
+          <div>
+            Open Houses
+            <ul>{openHouseItems}</ul>
+          </div>
+        );        
+      }
+
       return (
         <div key={listing.hash}>
+          Street Easy: {listing.name}<br/>
           Price: ${listing.price_usd}
+          {openHouseNodes}
         </div>
       );
     });

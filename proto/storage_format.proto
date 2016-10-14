@@ -4,6 +4,7 @@ message StreetEasyAnnotation {
   string name = 1;
   int32 price_usd = 2;
   uint64 hash = 3;
+  repeated string open_house = 4;
 }
 
 message RefreshStreetEasyTask {

@@ -157,6 +157,7 @@ pub struct FullStreetEasyAnnotation {
     pub hash: u64,
     pub price_usd: i32,
     pub name: String,
+    pub open_houses: Vec<String>,
 }
 
 

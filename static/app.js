@@ -130,11 +130,37 @@ var ListItem = React.createClass({
     });
 
     var streetEasyNodes = this.props.data.streeteasy_annotations.map(function (listing) {
+      var openHouseNodes;
+
+      if (listing.open_houses.length > 0) {
+        var openHouseItems = listing.open_houses.map(function (open_house) {
+          return React.createElement(
+            'li',
+            { key: open_house },
+            open_house
+          );
+        });
+        var openHouseNodes = React.createElement(
+          'div',
+          null,
+          'Open Houses',
+          React.createElement(
+            'ul',
+            null,
+            openHouseItems
+          )
+        );
+      }
+
       return React.createElement(
         'div',
         { key: listing.hash },
+        'Street Easy: ',
+        listing.name,
+        React.createElement('br', null),
         'Price: $',
-        listing.price_usd
+        listing.price_usd,
+        openHouseNodes
       );
     });
 

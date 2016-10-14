@@ -49,6 +49,9 @@ fn attach_auto_annotation(item: &mut model::FullItem, auto_annotation: &model::A
                 hash: saved_data.get_hash(),
                 name: saved_data.get_name().to_string(),
                 price_usd: saved_data.get_price_usd(),
+                open_houses: saved_data.get_open_house().iter()
+                    .map(|x| x.to_string()).collect(),
+                
             });
         }
         _ => println!("Ignoring auto annotation: {:?}", auto_annotation),
@@ -191,6 +194,9 @@ impl AnnotationExpander {
         a.set_price_usd(listing.price_usd);
         a.set_name(listing.name);
         a.set_hash(hasher.finish());
+        for oh in listing.open_houses {
+            a.mut_open_house().push(oh.info);
+        }
                 
         try!(self.db.lock().unwrap().add_auto_annotation(
             item_id, parent_id, "STREETEASY",
