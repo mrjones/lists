@@ -49,11 +49,6 @@ var App = React.createClass({
     return React.createElement(
       'div',
       null,
-      React.createElement(
-        'h1',
-        null,
-        'Welcome to the Lists App!'
-      ),
       React.cloneElement(this.props.children, {
         userId: this.props.params.userId
       })
@@ -120,7 +115,7 @@ var ListItem = React.createClass({
     var linkNodes = this.props.data.link_annotations.map(function (link) {
       return React.createElement(
         'div',
-        { key: link.url },
+        { className: 'annotation link', key: link.url },
         React.createElement(
           'a',
           { href: link.url },
@@ -154,10 +149,17 @@ var ListItem = React.createClass({
 
       return React.createElement(
         'div',
-        { key: listing.hash },
-        'Street Easy: ',
-        listing.name,
-        React.createElement('br', null),
+        { className: 'annotation streeteasy', key: listing.hash },
+        React.createElement(
+          'div',
+          { className: 'kind' },
+          'StreetEasy'
+        ),
+        React.createElement(
+          'div',
+          { className: 'title' },
+          listing.name
+        ),
         'Price: $',
         listing.price_usd,
         openHouseNodes
@@ -167,7 +169,7 @@ var ListItem = React.createClass({
     var textNodes = this.props.data.text_annotations.map(function (text) {
       return React.createElement(
         'div',
-        { key: text.id },
+        { className: 'annotation text', key: text.id },
         text.text
       );
     });
@@ -205,38 +207,46 @@ var ListItem = React.createClass({
       { className: 'listItem' },
       React.createElement(
         'div',
-        null,
+        { className: 'header' },
         React.createElement(
           'span',
           { className: 'name' },
           this.props.data.name
         ),
         React.createElement(
-          'button',
-          { onClick: this.delete },
-          'X'
-        ),
-        React.createElement(
-          'button',
-          { onClick: this.toggleLinkAnnotationAdder },
-          this.state.addingLinkAnnotation ? "-URL" : "+URL"
-        ),
-        React.createElement(
-          'button',
-          { onClick: this.toggleTextAnnotationAdder },
-          this.state.addingTextAnnotation ? "-Text" : "+Text"
+          'div',
+          { className: 'tools' },
+          React.createElement(
+            'button',
+            { onClick: this.toggleLinkAnnotationAdder },
+            this.state.addingLinkAnnotation ? "-URL" : "+URL"
+          ),
+          React.createElement(
+            'button',
+            { onClick: this.toggleTextAnnotationAdder },
+            this.state.addingTextAnnotation ? "-Text" : "+Text"
+          ),
+          React.createElement(
+            'button',
+            { onClick: this.delete },
+            'X'
+          )
         )
       ),
       React.createElement(
         'div',
-        { className: 'description' },
-        this.props.data.description
-      ),
-      linkNodes,
-      streetEasyNodes,
-      textNodes,
-      addLinkNodes,
-      addTextNodes
+        { className: 'body' },
+        React.createElement(
+          'div',
+          { className: 'description' },
+          this.props.data.description
+        ),
+        linkNodes,
+        streetEasyNodes,
+        textNodes,
+        addLinkNodes,
+        addTextNodes
+      )
     );
   }
 });
@@ -385,13 +395,10 @@ var List = React.createClass({
     }.bind(this));
     return React.createElement(
       'div',
-      null,
+      { className: 'list' },
       React.createElement(
         'div',
-        null,
-        'ListID: ',
-        this.props.params.listId,
-        ' / ',
+        { className: 'listName' },
         this.state.name
       ),
       React.createElement(
@@ -399,7 +406,7 @@ var List = React.createClass({
         null,
         React.createElement(
           'ul',
-          null,
+          { className: 'listItems' },
           itemNodes
         )
       ),

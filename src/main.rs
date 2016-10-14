@@ -265,6 +265,9 @@ fn serve_rustful(
             "/static/app.js" => {
                 Get: Api::StaticFile{filename: "static/app.js"},
             },
+            "/static/style.css" => {
+                Get: Api::StaticFile{filename: "static/style.css"},
+            },
             "/users" => {
                 Get: Api::LoggedOutHandler{handler: all_users},
             },

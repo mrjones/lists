@@ -41,7 +41,6 @@ var App = React.createClass({
   render: function() {
     return (
       <div>
-        <h1>Welcome to the Lists App!</h1>
         {React.cloneElement(this.props.children, {
            userId: this.props.params.userId
          })}
@@ -106,7 +105,7 @@ var ListItem = React.createClass({
   render: function() {
     var linkNodes = this.props.data.link_annotations.map(function(link) {
       return (
-        <div key={link.url}>
+        <div className="annotation link" key={link.url}>
           <a href={link.url}>{link.url}</a>
         </div>
       )
@@ -128,8 +127,9 @@ var ListItem = React.createClass({
       }
 
       return (
-        <div key={listing.hash}>
-          Street Easy: {listing.name}<br/>
+        <div className="annotation streeteasy" key={listing.hash}>
+          <div className="kind">StreetEasy</div>
+          <div className="title">{listing.name}</div>
           Price: ${listing.price_usd}
           {openHouseNodes}
         </div>
@@ -138,7 +138,7 @@ var ListItem = React.createClass({
 
     var textNodes = this.props.data.text_annotations.map(function(text) {
       return (
-        <div key={text.id}>
+        <div className="annotation text" key={text.id}>
           {text.text}
         </div>
       );
@@ -164,22 +164,27 @@ var ListItem = React.createClass({
 
     return (
       <li className="listItem">
-        <div>
+        <div className="header">
           <span className="name">{this.props.data.name}</span>
-          <button onClick={this.delete}>X</button>
-          <button onClick={this.toggleLinkAnnotationAdder}>
-            {this.state.addingLinkAnnotation ? "-URL" : "+URL"}
-          </button>
-          <button onClick={this.toggleTextAnnotationAdder}>
-            {this.state.addingTextAnnotation ? "-Text" : "+Text"}
-          </button>
+
+          <div className="tools">
+            <button onClick={this.toggleLinkAnnotationAdder}>
+              {this.state.addingLinkAnnotation ? "-URL" : "+URL"}
+            </button>
+            <button onClick={this.toggleTextAnnotationAdder}>
+              {this.state.addingTextAnnotation ? "-Text" : "+Text"}
+            </button>
+            <button onClick={this.delete}>X</button>
+          </div>
         </div>
-        <div className="description">{this.props.data.description}</div>
-        {linkNodes}
-        {streetEasyNodes}
-        {textNodes}
-        {addLinkNodes}
-        {addTextNodes}
+        <div className="body">
+          <div className="description">{this.props.data.description}</div>
+          {linkNodes}
+          {streetEasyNodes}
+          {textNodes}
+          {addLinkNodes}
+          {addTextNodes}
+        </div>
       </li>
     );
   }
@@ -324,12 +329,12 @@ var List = React.createClass({
       );
     }.bind(this));
     return (
-      <div>
-        <div>
-          ListID: {this.props.params.listId} / {this.state.name}
+      <div className="list">
+        <div className="listName">
+          {this.state.name}
         </div>
         <div>
-          <ul>
+          <ul className="listItems">
             {itemNodes}
           </ul>
         </div>

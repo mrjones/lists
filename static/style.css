@@ -1,0 +1,78 @@
+body {
+    font-family: Arial;
+    font-size: 90%;
+#    text-align: center;
+    background-color: #DDDDDD;
+}
+
+a {
+    color: #5588DD;
+}
+
+a:hover {
+    text-decoration: none;
+}
+
+.listName {
+    font-size: 200%;
+    font-weight: bold;
+    color: #5588DD;
+}
+
+.listItems {
+    padding: 0;
+    display: inline-block;
+}
+
+.list {
+    margin: auto;
+    padding: 0;
+    display: inline-block;
+    border: 1px solid: #999999;
+    padding: 1em;
+    text-align: left;
+}
+
+.listItem {
+    list-style-type: none;
+    margin-left: 0;
+    margin-right: 0;
+    margin-top: 1em;
+    margin-bottom: 1em;
+    background-color: #ffffff;
+    box-shadow: 2px 2px 5px #888888;
+}
+
+.listItem .header {
+    font-weight: bold;
+    background-color: #5588DD;
+    color: #eeeeee;
+    padding: .25em;
+    border-bottom: 1px solid #1155CC;
+}
+
+.listItem .header .name {
+    text-transform: uppercase;
+}
+
+.listItem .header .tools {
+    display: inline-block;
+    float: right;
+}
+
+.listItem .body {
+    padding: .25em;
+}
+
+.listItem .annotation {
+    padding: .25em;
+    margin-top: .5em;
+    border-left: 3px solid #5588DD;
+}
+
+.listItem .annotation .kind {
+    font-weight: bold;
+    color: #5588DD;
+    font-size: 80%;
+    margin-bottom: .25em;
+}
