@@ -76,3 +76,24 @@ a:hover {
     font-size: 80%;
     margin-bottom: .25em;
 }
+
+
+.listPicker,
+.userPicker {
+    text-align: center;
+}
+
+.listPicker .list, 
+.userPicker .user {
+    background-color: #5588DD;
+    color: white;
+    padding: 1em;
+    margin: 1em;
+    display: inline-block;
+    font-size: 150%;
+}
+
+.listPicker .list a,
+.userPicker .user a {
+    color: white;
+}

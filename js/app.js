@@ -21,18 +21,18 @@ var UserPicker = React.createClass({
   render: function() {
     var userNodes = this.state.users.map(function(user) {
       return (
-        <div className="user" key={user.id}>
+        <li className="user" key={user.id}>
           <ReactRouter.Link to={`/lists/${user.id}`}>
             {user.name}
           </ReactRouter.Link>
-        </div>
+        </li>
       );
     });
     
     return (
-      <div className="userPicker">
+      <ul className="userPicker">
         {userNodes}
-      </div>
+      </ul>
     );
   },
 });
@@ -435,7 +435,7 @@ var ListPicker = React.createClass({
     }, this);
     return (
       <div>
-        <ul>
+        <ul className="listPicker">
           {listNodes}
         </ul>
         <NewListWidget userId={this.props.userId} listAddedFn={this.listAdded}/>

@@ -24,7 +24,7 @@ var UserPicker = React.createClass({
   render: function () {
     var userNodes = this.state.users.map(function (user) {
       return React.createElement(
-        'div',
+        'li',
         { className: 'user', key: user.id },
         React.createElement(
           ReactRouter.Link,
@@ -35,7 +35,7 @@ var UserPicker = React.createClass({
     });
 
     return React.createElement(
-      'div',
+      'ul',
       { className: 'userPicker' },
       userNodes
     );
@@ -520,7 +520,7 @@ var ListPicker = React.createClass({
       null,
       React.createElement(
         'ul',
-        null,
+        { className: 'listPicker' },
         listNodes
       ),
       React.createElement(NewListWidget, { userId: this.props.userId, listAddedFn: this.listAdded })
