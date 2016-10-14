@@ -46,13 +46,13 @@ a:hover {
 .listItem .header {
     font-weight: bold;
     background-color: #5588DD;
-    color: #eeeeee;
+    color: #ffffff;
     padding: .25em;
     border-bottom: 1px solid #1155CC;
 }
 
 .listItem .header .name {
-    text-transform: uppercase;
+
 }
 
 .listItem .header .tools {

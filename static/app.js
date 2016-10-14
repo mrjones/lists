@@ -118,7 +118,7 @@ var ListItem = React.createClass({
         { className: 'annotation link', key: link.url },
         React.createElement(
           'a',
-          { href: link.url },
+          { href: link.url, target: '_' },
           link.url
         )
       );

@@ -106,7 +106,7 @@ var ListItem = React.createClass({
     var linkNodes = this.props.data.link_annotations.map(function(link) {
       return (
         <div className="annotation link" key={link.url}>
-          <a href={link.url}>{link.url}</a>
+          <a href={link.url} target="_">{link.url}</a>
         </div>
       )
     });
