@@ -15,7 +15,7 @@ var UserPicker = React.createClass({
       url: '/users',
       dataType: 'json',
       cache: false,
-      success: function(data) {
+      success: function(data: Object[]) {
         console.log(data);
         this.setState({users: data});
       }.bind(this),
@@ -25,7 +25,7 @@ var UserPicker = React.createClass({
     });
   },
   render: function() {
-    var userNodes = this.state.users.map(function(user) {
+    var userNodes = this.state.users.map(function(user: Object) {
       return (
         <li className="user" key={user.id}>
           <ReactRouter.Link to={`/lists/${user.id}`}>
@@ -67,7 +67,7 @@ var ListItem = React.createClass({
   delete: function() {
     this.props.deleteFn(this.props.data.id);
   },
-  postAnnotation: function(annotationObj) {
+  postAnnotation: function(annotationObj: Object) {
     var url = `/lists/${this.props.userId}/list/${this.props.listId}/items/${this.props.data.id}/annotations`;
 
     $.ajax({
@@ -75,7 +75,7 @@ var ListItem = React.createClass({
       dataType: 'json',
       type: 'POST',
       data: JSON.stringify(annotationObj),
-      success: function(data) {
+      success: function(data: Object) {
         console.log("posted new annotation. got respnse: " + JSON.stringify(data));
         this.props.itemUpdatedFn(data);
       }.bind(this),
@@ -204,7 +204,7 @@ var AddItemWidget = React.createClass({
   handleDescriptionChange: function(e) {
     this.setState({description: e.target.value});
   },
-  handleSubmit: function(e) {
+  handleSubmit: function(e: Event) {
     e.preventDefault();
     var item = {
       name: this.state.name,
@@ -219,7 +219,7 @@ var AddItemWidget = React.createClass({
       dataType: 'json',
       type: 'POST',
       data: JSON.stringify(item),
-      success: function(data) {
+      success: function(data: Object) {
         console.log("posted new item. got respnse: " + JSON.stringify(data));
         this.props.itemAddedFn(data);
       }.bind(this),
@@ -252,17 +252,17 @@ var List = React.createClass({
   getInitialState: function() {
     return {name: "", items: []}
   },
-  itemAdded: function(item) {
+  itemAdded: function(item: Object) {
     console.log("List::itemAdded: " + JSON.stringify(item));
     this.setState({items: this.state.items.concat([item])});
   },
-  deleteItem: function(id) {
+  deleteItem: function(id: string) {
     $.ajax({
       url: `/lists/${this.props.params.userId}/list/${this.props.params.listId}/items/${id}`,
       type: 'DELETE',
       dataType: 'json',
       cache: false,
-      success: function(data) {
+      success: function(data: Object) {
         this.itemDeleted(id);
       }.bind(this),
       error: function(xhr, status, err) {
@@ -270,13 +270,13 @@ var List = React.createClass({
       }.bind(this)
     });
   },
-  itemDeleted: function(id) {
+  itemDeleted: function(id: string) {
     console.log("Removing item with id: " + id);
     this.setState({items: this.state.items.filter(function(item) {
       return item.id != id;
     })});
   },
-  itemUpdateReceived: function(e) {
+  itemUpdateReceived: function(e: MessageEvent) {
 
     if (typeof e.data === "string") {
       var dataStr = e.data;
@@ -286,7 +286,7 @@ var List = React.createClass({
       console.log("Unexpected non-string response!");
     }
   },
-  handleItemUpdate: function(json_data) {
+  handleItemUpdate: function(json_data: Object) {
     var new_item = json_data
     var new_items = this.state.items.map(function(old_item) {
       console.log("COMPARIING: " + JSON.stringify(old_item) + " vs. " + JSON.stringify(new_item));
@@ -310,7 +310,7 @@ var List = React.createClass({
       url: `/lists/${this.props.params.userId}/list/${this.props.params.listId}`,
       dataType: 'json',
       cache: false,
-      success: function(data) {
+      success: function(data: Object) {
         this.setState({name: data.name, items: data.items});
 
         // TODO(mrjones): Negotiate the host / port?
@@ -368,7 +368,7 @@ var NewListWidget = React.createClass({
       dataType: 'json',
       type: 'POST',
       data: JSON.stringify(list),
-      success: function(data) {
+      success: function(data: Object) {
         this.props.listAddedFn(data);
       }.bind(this),
       error: function(xhr, status, err) {
@@ -398,7 +398,7 @@ var ListPicker = React.createClass({
       url: `/lists/${this.props.userId}`,
       dataType: 'json',
       cache: false,
-      success: function(data) {
+      success: function(data: Object[]) {
         console.log(data);
         this.setState({lists: data});
       }.bind(this),
@@ -416,7 +416,7 @@ var ListPicker = React.createClass({
       type: 'DELETE',
       dataType: 'json',
       cache: false,
-      success: function(data) {
+      success: function(data: Object) {
         this.listRemoved(list_id);
       }.bind(this),
       error: function(xhr, status, err) {
@@ -424,12 +424,12 @@ var ListPicker = React.createClass({
       }.bind(this)
     });
   },
-  listRemoved: function(list_id) {
+  listRemoved: function(list_id: string) {
     this.setState({lists: this.state.lists.filter(function(list) {
       return list.id != list_id;
     })});
   },
-  listAdded: function(list) {
+  listAdded: function(list: Object) {
     this.setState({lists: this.state.lists.concat([list])});
   },
   render: function() {
@@ -463,7 +463,7 @@ var SharingWidget = React.createClass({
       allUsers: []
     };
   },
-  byId: function(a, b) {
+  byId: function(a: Object, b: Object) {
     return a.id - b.id;
   },
   fetchAccessors: function() {
@@ -472,7 +472,7 @@ var SharingWidget = React.createClass({
       url: url,
       dataType: 'json',
       cache: false,
-      success: function(data) {
+      success: function(data: Object[]) {
         data.sort(this.byId);
         this.setState({sharedWithLoaded: true, sharedWithUsers: data});
       }.bind(this),
@@ -487,7 +487,7 @@ var SharingWidget = React.createClass({
       url: url,
       dataType: 'json',
       cache: false,
-      success: function(data) {
+      success: function(data: Object[]) {
         data.sort(this.byId);
         this.setState({allUsersLoaded: true, allUsers: data});
       }.bind(this),
@@ -500,7 +500,7 @@ var SharingWidget = React.createClass({
     this.fetchAccessors();
     this.fetchAllUsers();
   },
-  assertSortedById: function(a) {
+  assertSortedById: function(a: Object[]) {
     for (var i = 1; i < a.length; i++) {
       if (a[i-1].id > a[i].id) {
         console.error("Not sorted at index " + i);
@@ -528,7 +528,7 @@ var SharingWidget = React.createClass({
 
     return unshared;
   },
-  addUserToList: function(userId) {
+  addUserToList: function(userId: string) {
     var url = `/lists/${this.props.myUserId}/list/${this.props.listId}/accessors`
     $.ajax({
       url: url,
@@ -544,7 +544,7 @@ var SharingWidget = React.createClass({
       }.bind(this),
     });
   },
-  removeUserFromList: function(userId) {
+  removeUserFromList: function(userId: string) {
     var url = `/lists/${this.props.myUserId}/list/${this.props.listId}/accessors`
     $.ajax({
       url: url,
