@@ -1,6 +1,4 @@
 # npm install -g watchify
-# npm install --save babelify babel-preset-react
-# npm install --save google-protobuf
 watchify \
     --verbose \
     --transform [ babelify --presets [ react ] ] \

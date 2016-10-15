@@ -1,3 +1,4 @@
+/* @flow */
 var React = require('react');
 var ReactDOM = require('react-dom');
 var ReactRouter = require('react-router');
@@ -59,10 +60,9 @@ var ListItem = React.createClass({
     return {
       addingLinkAnnotation: false,
       pendingLinkAnnotation: '',
-      addingTextAnnotations: false,
+      addingTextAnnotation: false,
       pendingTextAnnotation: ''
     }
-    return this.stateForItem(this.props.data);
   },
   delete: function() {
     this.props.deleteFn(this.props.data.id);
@@ -78,7 +78,6 @@ var ListItem = React.createClass({
       success: function(data) {
         console.log("posted new annotation. got respnse: " + JSON.stringify(data));
         this.props.itemUpdatedFn(data);
-//        this.setState(this.stateForItem(data));
       }.bind(this),
       error: function(xhr, status, err) {
         console.error(url, status, err.toString());
@@ -278,8 +277,14 @@ var List = React.createClass({
     })});
   },
   itemUpdateReceived: function(e) {
-    console.log("Got " + e.data + " from WS server");
-    this.handleItemUpdate(JSON.parse(e.data));
+
+    if (typeof e.data === "string") {
+      var dataStr = e.data;
+      this.handleItemUpdate(JSON.parse(dataStr));
+      console.log("Got " + dataStr + " from WS server");
+    } else {
+      console.log("Unexpected non-string response!");
+    }
   },
   handleItemUpdate: function(json_data) {
     var new_item = json_data

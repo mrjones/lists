@@ -1,3 +1,4 @@
+# npm install -g browserify
 browserify \
     --verbose \
     --require react \

@@ -9,6 +9,7 @@
   },
   "devDependencies": {
     "babel": "^6.5.2",
+    "babel-preset-react": "^6.16.0",
     "uglifyify": "^3.0.4"
   }
 }
