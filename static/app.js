@@ -3,6 +3,7 @@ var React = require('react');
 var ReactDOM = require('react-dom');
 var ReactRouter = require('react-router');
 var $ = require('jquery');
+var model = require('./model.js');
 
 var sockets_api = require('./sockets_api_pb.js');
 
@@ -19,7 +20,7 @@ var UserPicker = React.createClass({
       cache: false,
       success: function (data) {
         console.log(data);
-        this.setState({ users: data });
+        this.setState({ users: data.map(model.User.from_json) });
       }.bind(this),
       error: function (xhr, status, err) {
         console.error(this.props.url, status, err.toString());
@@ -717,7 +718,60 @@ ReactDOM.render(React.createElement(
   )
 ), document.getElementById('content'));
 
-},{"./sockets_api_pb.js":2,"jquery":"jquery","react":"react","react-dom":"react-dom","react-router":"react-router"}],2:[function(require,module,exports){
+},{"./model.js":2,"./sockets_api_pb.js":3,"jquery":"jquery","react":"react","react-dom":"react-dom","react-router":"react-router"}],2:[function(require,module,exports){
+class User {
+
+  static from_json(json_user) {
+    var user = new User();
+    user.name = json_user.name;
+    user.id = json_user.id;
+    return user;
+  }
+}
+
+class StreetEasyAnnotation {
+
+  static from_json(json) {
+    var annotation = new StreetEasyAnnotation();
+    annotation.hash = json.hash;
+    annotation.name = "flow:" + json.name;
+    annotation.price_usd = json.price_usd;
+    annotation.open_houses = json.open_houses;
+    return annotation;
+  }
+}
+
+class ListItem {
+
+  static from_json(json_item) {
+    var item = new ListItem();
+    item.name = json_item.name;
+    item.description = json_item.description;
+    item.text_annotations = json_item.text_annotations;
+    item.link_annotations = json_item.link_annotations;
+    item.streeteasy_annotations = json_item.streeteasy_annotations.map(StreetEasyAnnotation.from_json);
+    return item;
+  }
+}
+
+class List {
+
+  static from_json(json) {
+    var list = new List();
+    list.name = json.name;
+    list.items = json.items.map(ListItem.from_json);
+    return list;
+  }
+}
+
+module.exports = {
+  List,
+  ListItem,
+  StreetEasyAnnotation,
+  User
+};
+
+},{}],3:[function(require,module,exports){
 /**
  * @fileoverview
  * @enhanceable
@@ -871,4 +925,4 @@ proto.Request.prototype.setWatchListId = function (value) {
 
 goog.object.extend(exports, proto);
 
-},{"google-protobuf":"google-protobuf"}]},{},[1,2]);
+},{"google-protobuf":"google-protobuf"}]},{},[1,3]);
