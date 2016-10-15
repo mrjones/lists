@@ -8,6 +8,7 @@
     "react-router": "^2.8.1"
   },
   "devDependencies": {
-    "babel": "^6.5.2"
+    "babel": "^6.5.2",
+    "uglifyify": "^3.0.4"
   }
 }

@@ -1,1 +1,9 @@
-browserify -r react -r react-dom -r react-router -r jquery -r google-protobuf -o static/deps.js
+browserify \
+    --verbose \
+    --require react \
+    --require react-dom \
+    --require react-router \
+    --require jquery \
+    --require google-protobuf \
+    --outfile static/deps.js \
+    --global-transform uglifyify
