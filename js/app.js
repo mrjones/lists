@@ -1,5 +1,10 @@
 var sockets_api = require('./sockets_api_pb.js');
 
+var React = require('react');
+var ReactDOM = require('react-dom');
+var ReactRouter = require('react-router');
+var $ = require('jquery');
+
 var UserPicker = React.createClass({
   getInitialState : function() {
     return {users: []};
@@ -597,7 +602,7 @@ var SharingWidget = React.createClass({
 
 // https://www.kirupa.com/react/creating_single_page_app_react_using_react_router.htm
 ReactDOM.render((
-  <ReactRouter.Router>
+  <ReactRouter.Router history={ReactRouter.hashHistory}>
     <ReactRouter.Route path="/" component={UserPicker} />
     <ReactRouter.Route path="/lists/:userId" component={App}>
       <ReactRouter.IndexRoute component={ListPicker} />
