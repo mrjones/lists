@@ -1,9 +1,9 @@
-var sockets_api = require('./sockets_api_pb.js');
-
 var React = require('react');
 var ReactDOM = require('react-dom');
 var ReactRouter = require('react-router');
 var $ = require('jquery');
+
+var sockets_api = require('./sockets_api_pb.js');
 
 var UserPicker = React.createClass({
   getInitialState : function() {

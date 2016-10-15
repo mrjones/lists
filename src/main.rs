@@ -265,6 +265,9 @@ fn serve_rustful(
             "/static/app.js" => {
                 Get: Api::StaticFile{filename: "static/app.js"},
             },
+            "/static/deps.js" => {
+                Get: Api::StaticFile{filename: "static/deps.js"},
+            },
             "/static/style.css" => {
                 Get: Api::StaticFile{filename: "static/style.css"},
             },
