@@ -9,6 +9,7 @@ extern crate websocket;
 use rustc_serialize::json::ToJson;
 
 mod annotations;
+mod api;
 mod cache;
 mod data;
 mod model;

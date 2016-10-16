@@ -1,10 +1,41 @@
 extern crate chrono;
 extern crate std;
 extern crate mysql;
+extern crate protobuf;
 extern crate rustc_serialize;
 
 use rustc_serialize::json::Json;
 use rustc_serialize::json::ToJson;
+
+fn field_to_json(
+    message: &protobuf::Message,
+    field_descriptor: &protobuf::reflect::FieldDescriptor) -> Json {
+    match field_descriptor.proto().get_field_type() {
+        protobuf::descriptor::FieldDescriptorProto_Type::TYPE_MESSAGE => {
+            let sub_message: &protobuf::Message =
+                field_descriptor.get_message(message);
+            return proto_to_json(sub_message);
+        },
+        protobuf::descriptor::FieldDescriptorProto_Type::TYPE_STRING => {
+            return Json::String(field_descriptor.get_str(message).to_string());
+        }
+        protobuf::descriptor::FieldDescriptorProto_Type::TYPE_INT64 => {
+            return Json::I64(field_descriptor.get_i64(message));
+        }
+        _ => unimplemented!(),
+    }
+}
+
+pub fn proto_to_json(message: &protobuf::Message) -> Json {
+    let descriptor = message.descriptor();
+    let mut field_map = std::collections::BTreeMap::<String, Json>::new();
+
+    for field in descriptor.fields() {
+        field_map.insert(field.name().to_string(), field_to_json(message, field));
+    }
+
+    return Json::Object(field_map);
+}
 
 // TODO(mrjones): This is really terrible :/
 // Reference: https://github.com/rust-lang-nursery/rustc-serialize/issues/46
@@ -209,5 +240,23 @@ impl DbObject for DbWorkQueueLease {
             expiration: std::time::UNIX_EPOCH +
                 std::time::Duration::new(epoch_expiration, 0),
         };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use api;
+
+    use rustc_serialize::json::Json;
+    
+    #[test]
+    fn proto_to_json() {
+        let mut user = api::User::new();
+        user.set_name("matt".to_string());
+        user.set_id(1);
+
+        assert_eq!(
+            "{\"id\":1, \"name\":\"matt\"}".to_string(),
+            super::proto_to_json(&user).to_string());
     }
 }
