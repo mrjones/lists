@@ -245,9 +245,12 @@ impl DbObject for DbWorkQueueLease {
 
 #[cfg(test)]
 mod tests {
+    extern crate std;
+    
     use api;
 
     use rustc_serialize::json::Json;
+    use std::iter::FromIterator;
     
     #[test]
     fn proto_to_json() {
@@ -255,6 +258,14 @@ mod tests {
         user.set_name("matt".to_string());
         user.set_id(1);
 
+        assert_eq!(
+            super::proto_to_json(&user),
+            Json::Object(
+                std::collections::BTreeMap::from_iter(vec![
+                    ("name".to_string(), Json::String("matt".to_string())),
+                    ("id".to_string(), Json::I64(1))
+                ].into_iter())));
+        
         assert_eq!(
             "{\"id\":1,\"name\":\"matt\"}".to_string(),
             super::proto_to_json(&user).to_string());
