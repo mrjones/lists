@@ -1,6 +1,38 @@
 syntax = "proto3";
 
 message User {
+  int64 id = 1;
+  string name = 2;
+}
+
+message List {
   string name = 1;
-  int64 id = 2;
+  repeated ListItem items = 2;
+}
+
+message ListItem {
+  int64 id = 1;
+  string name = 2;
+  string description = 3;
+
+  repeated LinkAnnotation link_annotations = 4;
+  repeated TextAnnotation text_annotations = 5;
+  repeated StreetEasyAnnotation streeteasy_annotations = 6;
+}
+
+message LinkAnnotation {
+  int64 id = 1;
+  string url = 2;
+}
+
+message TextAnnotation {
+  int64 id = 1;
+  string text = 2;
+}
+
+message StreetEasyAnnotation {
+  uint64 hash = 1;  // TODO: Make this "id"
+  string name = 2;
+  int32 price_usd = 3;
+  repeated string open_houses = 4;
 }
