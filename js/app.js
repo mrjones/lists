@@ -3,7 +3,9 @@ var React = require('react');
 var ReactDOM = require('react-dom');
 var ReactRouter = require('react-router');
 var $ = require('jquery');
+
 var model = require('./model.js')
+var api = require('./api_pb.js')
 
 var sockets_api = require('./sockets_api_pb.js');
 
@@ -18,7 +20,7 @@ var UserPicker = React.createClass({
       cache: false,
       success: function(data: Object[]) {
         console.log(data);
-        this.setState({users: data.map(model.User.from_json)});
+        this.setState({users: data.map(model.user_from_json)});
       }.bind(this),
       error: function(xhr, status, err) {
         console.error(this.props.url, status, err.toString());        
@@ -26,11 +28,11 @@ var UserPicker = React.createClass({
     });
   },
   render: function() {
-    var userNodes = this.state.users.map(function(user: model.User) {
+    var userNodes = this.state.users.map(function(user: api.User) {
       return (
-        <li className="user" key={user.id}>
-          <ReactRouter.Link to={`/lists/${user.id}`}>
-            {user.name}
+        <li className="user" key={user.getId()}>
+          <ReactRouter.Link to={`/lists/${user.getId()}`}>
+            {user.getName()}
           </ReactRouter.Link>
         </li>
       );

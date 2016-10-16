@@ -1,15 +1,12 @@
 /* @flow */
 
-class User {
-  name: string;
-  id: number;
+var api = require('./api_pb.js');
 
-  static from_json(json_user: Object) {
-    var user = new User();
-    user.name = json_user.name;
-    user.id = json_user.id;
-    return user;
-  }
+function user_from_json(json: Object): api.User {
+  var user = new api.User();
+  user.setName(json.name);
+  user.setId(json.id);
+  return user;
 }
 
 class StreetEasyAnnotation {
@@ -62,8 +59,9 @@ class List {
 }
 
 module.exports = {
+  user_from_json,
+  
   List,
   ListItem,
   StreetEasyAnnotation,
-  User,
 };
