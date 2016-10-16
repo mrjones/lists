@@ -256,7 +256,7 @@ mod tests {
         user.set_id(1);
 
         assert_eq!(
-            "{\"id\":1, \"name\":\"matt\"}".to_string(),
+            "{\"id\":1,\"name\":\"matt\"}".to_string(),
             super::proto_to_json(&user).to_string());
     }
 }
